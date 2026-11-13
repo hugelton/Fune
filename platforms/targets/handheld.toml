@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "a small wide handheld"
+status = "fixture"         # no device: the default profile, the tests' second size (Switch Lite: 4 x this)
+
+[screen]
+size = [320, 180]
+
+[controls]
+input = ["pad", "touch"]
+shown = 4

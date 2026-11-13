@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+#
+# The source groups every build takes, and the order of the profile table. Each target has its own file in
+# platforms/targets/ (what it builds, its screen, its controls: platforms/targets/README.md). tools/kbuild.py reads them for
+# every build (CMake, platforms/fm1hw/build.sh, platforms/web/build.sh): a file added to a
+# group reaches them all.
+#
+#   tools/kbuild.py TARGET sources       the files, groups first, then the target's own
+#   tools/kbuild.py TARGET defines       -DNAME=VALUE for each define
+#   tools/kbuild.py TARGET cflags        the target's own compiler flags
+#   tools/kbuild.py TARGET profile       the profile it draws with
+#   tools/kbuild.py --group NAME         one group's files (CMake takes them as a list)
+#   tools/kbuild.py --profiles [--check] src/ui/profiles_gen.h from the targets' [screen] and [controls] (--check: is it current)
+#
+# Settings a target may give (as defines): K_TRACKS (1..8, 4 if not given), the sizes of the inserts' room, its own switches.
+# The shell builds (web, fm1) take a target's defines and flags; CMake (desktop, the tests) takes the groups
+# only: its defines stay the defaults. Values are passed unquoted through the shells: no spaces, quotes or $ in them.
+
+[groups]
+core = ["src/kreisel.c", "src/kreisel_song.c", "src/kreisel_save.c", "src/kreisel_clock.c", "src/kreisel_seqtool.c", "src/theme.c",
+        "src/engines_data.c", "src/pagedefs.c", "src/kreisel_param.c", "src/kreisel_demo.c", "src/kreisel_io.c"]
+audio = ["src/kreisel_audio.c"]
+fx = ["src/kreisel_fx.c", "third_party/pendel-dsp/pd_core.c", "third_party/pendel-dsp/pd_osc.c",
+      "third_party/pendel-dsp/pd_modules.c", "third_party/pendel-dsp/pd_effects.c"]
+ui = ["src/ui/gfx.c", "src/ui/draw.c", "src/ui/draw_input.c", "src/ui/draw_labels.c", "src/ui/draw_header.c",
+      "src/ui/draw_cards.c", "src/ui/draw_seq.c", "src/ui/draw_synth.c", "src/ui/draw_skin.c", "src/ui/draw_wide.c",
+      "src/ui/draw_engines.c", "src/ui/draw_mixer.c", "src/ui/draw_fx.c", "src/ui/draw_song.c", "src/ui/draw_sheets.c", "src/ui/draw_surface.c",
+      "src/ui/pixfont.c", "src/ui/pixfont8.c"]
+store_file = ["src/kreisel_store_file.c", "src/kreisel_ctl.c"]
+plugin_load = ["src/kreisel_plugin_load.c"]
+plugin_image = ["src/kreisel_plugin_image.c"]   # plugins as images in a device's flash (the FM-1)
+
+# The profile table (src/ui/profiles_gen.h), in this order: the first is the default (k_profile_default)
+[profiles]
+order = ["handheld", "fm1", "zero", "h700", "mac", "cores3", "switch"]

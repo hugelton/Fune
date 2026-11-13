@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "Linux desktop (SDL2)"
+status = "target"
+# the same build and screen as macOS (CMake, platforms/sdl): the profile "mac"
+profile = "mac"

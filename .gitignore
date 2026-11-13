@@ -1,0 +1,11 @@
+build/
+cmake-build-*/
+.DS_Store
+*.o
+*.dSYM/
+__pycache__/
+*.pyc
+platforms/web/dist/
+build_*/
+build_asan
+build_rel

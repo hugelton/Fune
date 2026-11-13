@@ -1,0 +1,208 @@
+<!doctype html>
+<!-- Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments. The web installer for the FM-1 and the SMK-37:
+     platforms/web/installer/build.sh puts it, its script, the packages and packages.json in one folder. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="icon-192.png">
+<title>Firmware Installer</title>
+<style>
+/* Fune's own look: the device's black and greys, its green and red, a header like its screen's, steps as a strip */
+:root {
+  --bg: #010101; --panel: #121214; --well: #1c1c1f; --edge: #2c2c30; --text: #c2c6cc; --head: #f5f5f7; --mid: #8a8d93;
+  --go: #32d74b; --stop: #ff453a; --warn: #ffd60a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { background: var(--bg); }
+body { margin: 0; color: var(--text); font: 400 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.bar { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--edge); }
+.bar img { width: 28px; height: 28px; border-radius: 7px; }
+.bar b { color: var(--head); font-size: 1rem; font-weight: 600; letter-spacing: .01em; }
+.bar .tag { margin-left: auto; font-size: .8125rem; color: var(--mid); }
+main { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
+.lead { color: var(--head); font-size: 1.375rem; font-weight: 600; line-height: 1.3; margin: 0 0 6px; }
+.sub { color: var(--mid); margin: 0 0 24px; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 16px; padding: 0; list-style: none; }
+.steps li { padding: 6px 10px; border-radius: 8px; background: var(--well); color: var(--mid); font-size: .8125rem; font-weight: 500; }
+.steps li.on { background: var(--head); color: var(--bg); }
+.steps li.done { color: var(--go); }
+.panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 16px; padding: 20px; margin-bottom: 12px; }
+.panel h2 { color: var(--head); font-size: 1.0625rem; font-weight: 600; margin: 0 0 8px; }
+p { margin: 0 0 14px; }
+.panel > :last-child { margin-bottom: 0; }
+a { color: var(--head); text-underline-offset: 3px; }
+button { font: inherit; }
+.primary { min-height: 34px; padding: 0 16px; border: 0; border-radius: 17px; font-size: .875rem; background: var(--go); color: #04120a;
+           font-weight: 700; letter-spacing: .02em; cursor: pointer; }
+.primary.quiet { background: var(--head); color: var(--bg); }
+.primary:disabled { background: var(--well); color: var(--mid); cursor: default; }
+:focus-visible { outline: 2px solid var(--head); outline-offset: 3px; }
+.small { color: var(--mid); font-size: .8125rem; }
+.readout { display: block; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--edge);
+           font-size: .875rem; color: var(--text); }
+.dev { color: var(--head); }
+.badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--warn); color: #000;
+         font-size: .6875rem; font-weight: 700; letter-spacing: .06em; vertical-align: 1px; }
+label.agree { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; cursor: pointer; }
+label.agree input { margin-top: 4px; accent-color: var(--go); }
+progress { appearance: none; width: 100%; height: 8px; margin: 14px 0 0; border: 0; border-radius: 4px; background: var(--well); overflow: hidden; }
+progress::-webkit-progress-bar { background: var(--well); }
+progress::-webkit-progress-value { background: var(--go); }
+progress::-moz-progress-bar { background: var(--go); }
+#status { margin-top: 10px; min-height: 1.5em; font-size: .875rem; font-weight: 500; }
+#status.ok { color: var(--go); } #status.bad { color: var(--stop); }
+details { margin-top: 20px; border-top: 1px solid var(--edge); padding: 12px 4px; }
+details:last-of-type { border-bottom: 1px solid var(--edge); }
+summary { cursor: pointer; font-weight: 500; color: var(--head); }
+details[open] summary { margin-bottom: 8px; }
+details ul { margin: 0; padding-left: 20px; }
+input[type=file] { color: var(--mid); font: inherit; font-size: .8125rem; max-width: 100%; }
+.extra { margin-top: 20px; }
+footer { margin-top: 28px; color: var(--mid); font-size: .75rem; }
+footer p { margin: 0 0 6px; }
+</style>
+</head>
+<body>
+<div class="bar"><img src="icon-192.png" alt=""><b id="title">Installer</b><span class="tag">FM-1 · SMK-37</span></div>
+<main>
+  <p class="lead" id="lead">Install</p>
+  <p class="sub">USB · Chrome or Edge · 1 minute</p>
+  <ol class="steps" id="steps"><li class="on">1 Connect</li><li>2 Install</li><li>3 Play</li></ol>
+
+  <section class="panel" id="nomidi" hidden><p>Needs Chrome or Edge on a computer.</p></section>
+
+  <section class="panel" id="s1">
+    <p><button class="primary quiet" id="find">Connect</button></p>
+    <p id="found" class="readout" hidden></p>
+    <div id="s2" hidden>
+      <label class="agree"><input type="checkbox" id="agree"><span>At my own risk</span></label>
+      <p><button class="primary" id="go" disabled>Install</button></p>
+      <progress id="bar" max="100" value="0" hidden></progress>
+      <div id="status" role="status" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <details>
+    <summary>Help</summary>
+    <ul>
+      <li>Close other apps using the device's MIDI.</li>
+      <li>Stopped half way? Replug, press Install again.</li>
+      <li>Back to stock: M-VAVE's updater.</li>
+      <li>Stock bootloader only. SMK-37: Alpha.</li>
+    </ul>
+  </details>
+
+  <footer>
+    <p><a href="LICENSE.txt">Licence</a> · <a href="THIRD_PARTY_NOTICES.txt">Notices</a> · Not affiliated with M-VAVE · © 2026 HÜGELTON INSTRUMENTS</p>
+  </footer>
+</main>
+<script type="module">
+import { Updater, productOf, logicalImage, modelOf, sha256hex, BLK } from "./installer.js";
+
+const NAME = "Fune";   // the product's shown name: one place
+const $ = (id) => document.getElementById(id);
+document.title = `${NAME} Installer`;
+$("title").textContent = NAME;
+$("lead").textContent = `Install ${NAME}`;
+function stepTo(n) { [...$("steps").children].forEach((li, i) => { li.className = i < n ? "done" : i === n ? "on" : ""; }); }
+
+let access = null, updater = null, dev = null, packages = [], chosen = null, busy = false;
+
+const EXPLAIN = {
+  notfound: "No device. Check the cable, close other MIDI apps, Connect again.",
+  model: "Wrong package for this device.",
+  stopped: "The device stopped. Nothing written. Replug and try again.",
+  lost: "Disconnected. Replug and press Install again.",
+  noloader: "Replug and press Install again.",
+  noreturn: "Turn the device off and on.",
+  mismatch: "Written, but not confirmed. Try once more.",
+  badreq: "Stopped: an unexpected request.",
+  badpkg: "Not a package for this device.",
+};
+
+function status(text, cls = "") { $("status").textContent = text; $("status").className = cls; }
+async function loadList() {
+  try {
+    const r = await fetch("packages.json", { cache: "no-cache" });
+    if (r.ok && (r.headers.get("content-type") || "").includes("json")) packages = await r.json();
+  } catch (_) { packages = []; }
+}
+
+// a package from the server, its size, digest and identity checked (a missing file can come back as the site's home page)
+async function fetchPackage(p) {
+  const r = await fetch(p.file, { cache: "no-cache" });
+  const raw = new Uint8Array(await r.arrayBuffer());
+  if (!r.ok || raw.length !== p.size || await sha256hex(raw) !== p.sha256 || productOf(raw) !== p.product)
+    throw Object.assign(new Error("Download failed. Reload and try again."), { code: "" });
+  return raw;
+}
+
+function showPackage() {
+  const p = chosen;
+  if (!p) { status("No package for this device.", "bad"); $("go").disabled = true; return; }
+  $("go").disabled = busy || !$("agree").checked;
+}
+
+$("find").onclick = async () => {
+  if (busy) return;
+  $("found").hidden = false;
+  $("found").textContent = "Looking…";
+  try {
+    if (!access) access = await navigator.requestMIDIAccess({ sysex: true });
+  } catch (_) {
+    $("found").textContent = "Allow MIDI access, then Connect again.";
+    return;
+  }
+  updater = updater || new Updater(access);
+  if (dev) { dev.link.close(); dev = null; }
+  dev = await updater.find();
+  if (!dev) { $("found").textContent = EXPLAIN.notfound; $("s2").hidden = true; return; }
+  const model = modelOf(dev.id.text), inUpdate = /^ota-/i.test(dev.id.model);
+  $("found").innerHTML = "";
+  const d = document.createElement("span"); d.className = "dev"; d.textContent = model;
+  if (!chosen || modelOf(chosen.product) !== model) chosen = packages.find((p) => modelOf(p.product) === model) || null;
+  $("found").append(d, chosen ? ` → build ${chosen.product.split("_").pop()}` : "");
+  if (chosen && chosen.alpha) { const a = document.createElement("span"); a.className = "badge"; a.textContent = "ALPHA"; $("found").append(" ", a); }
+  void inUpdate;
+  $("s2").hidden = false;
+  stepTo(1);
+  showPackage();
+};
+
+$("agree").onchange = showPackage;
+
+$("go").onclick = async () => {
+  if (busy || !dev || !chosen) return;
+  busy = true; $("go").disabled = true; $("find").disabled = true; $("bar").hidden = false; $("bar").value = 0;
+  try {
+    status("Downloading…");
+    const raw = chosen.raw || await fetchPackage(chosen);
+    if (modelOf(dev.id.text) !== modelOf(chosen.product)) throw Object.assign(new Error(EXPLAIN.model), { code: "model" });
+    const image = logicalImage(raw);
+    await updater.install(dev, image, chosen.product, (s, v) => {
+      if (s === "start" || s === "check") { status("Checking…"); $("bar").value = 3; }
+      else if (s === "loader") { status("Starting…"); $("bar").value = 6; }
+      else if (s === "write") { status(`Writing… ${v}%`); $("bar").value = 8 + Math.round(v * 0.88); }
+      else if (s === "reboot") { status("Restarting…"); $("bar").value = 97; }
+    });
+    $("bar").value = 100;
+    status("Done. Enjoy.", "ok");
+    stepTo(2);
+  } catch (e) {
+    status(EXPLAIN[e.code] || e.message, "bad");
+  } finally {
+    dev = null; busy = false; $("find").disabled = false;
+    
+    $("go").disabled = true;
+  }
+};
+
+if (!navigator.requestMIDIAccess || !window.isSecureContext) { $("nomidi").hidden = false; $("s1").hidden = true; }
+loadList();
+void BLK;
+</script>
+</body>
+</html>

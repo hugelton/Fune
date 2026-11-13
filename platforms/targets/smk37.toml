@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls. The fields: platforms/targets/README.md.
+
+name = "M-VAVE SMK-37 Pro / Elite (Alpha)"
+status = "target"          # an Alpha: built, run in fm1-emu's SMK-37 target, never on a unit by us
+# The FM-1's chip and its screens: the FM-1's profile (240 x 240, knobs and keys, its LEDs). No [screen] of its own, so the profile
+# table (src/ui/profiles_gen.h), which the FM-1's image carries too, is not changed by this target.
+profile = "fm1"
+
+# The FM-1's build with the SMK's board (platforms/fm1hw/build.sh, KREISEL_BOARD=smk37): third_party/felucca-bsp/boards/smk37
+# (display, matrix, muxes, pad LEDs, its flash map in smk37_map.h) and platforms/smk37/smk37_panel.c (the controls past the FM-1's).
+[build]
+groups = ["core", "audio", "fx", "ui", "plugin_image"]
+sources = ["platforms/fm1hw/fm1_rt.c"]
+[build.defines]
+KREISEL_PX16 = ""                  # the canvas in RGB565, as the panel: half the memory
+K_FX_POOL_BYTES = "40960"          # as the FM-1's (fm1.toml)
+K_SYS_VOICES = "16"
+PD_DLY_MAX_SAMPLES = "12000u"
+KREISEL_CURVE_W = "232"
+KREISEL_CURVE_H = "120"
+KREISEL_NO_LIBM = ""
+KREISEL_BITMAP_FONT = ""
+K_MUL_OUTLINE = "1"
+K_FM1_PLUG_RAM = "8u"              # no outside plugins in the Alpha (an empty region): their RAM pool is not needed
+
+# The controls, as the board layer and the panel file map them (the tables: SMK_BTN_AS_FM1, SMK_ENC_AS_FM1 in
+# boards/smk37/fm1_input.h; SMK_PAD_KEY and the rest in platforms/smk37/smk37_panel.c). Every FM-1 control keeps a home
+# (fm1-to-smk37 docs/04-controls-mapping.md):
+#   encoders  K1 MASTER (a virtual pot), K2 SELECT, K3 ALGORITHM, K4 PRESETS, K5..K8 the FM-1's K1..K4 (the four cards)
+#   buttons   SEQ PLAY = PLAY, SEQ REC = REC, PATCH = HOME, CHORD = ENV, NOTE REPEAT = LFO, FX = FX, SCALE = SEL, PARA = EDIT,
+#             ARP = ARP, SEQ = SEQ, GLOBE = GLO, BT = SAVE, OCTAVE- / OCTAVE+ = OCT- / OCT+;
+#             < / > SELECT a step back / on, KNOB BANK the page's tools, FADER BANK free
+#   keys      the middle 27 (F3..G5) the FM-1's key bed; the outer 10 (C3..E3, G#5..C6) notes
+#   pads      the 16 white keys: steps (on a drum track the lane in hand's), notes elsewhere on a synth track
+#   faders    the four tracks' levels; wheels: pitch bend, and macro 1 (mod)

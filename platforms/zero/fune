@@ -1,0 +1,23 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+# Fune on the Cardputer Zero (Alpha, not yet tried on a device): the profile zero, the whole screen.
+# Songs, presets, settings and plugins: ~/.local/share/kreisel (XDG_DATA_HOME/kreisel). The last run's log: there, log.txt.
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}/kreisel"
+mkdir -p "$DATA"
+# the plugins that come with it (the .deb's, beside this script): into the user's plugins, a newer copy over an older one
+if [ -d "$HERE/plugins" ]; then mkdir -p "$DATA/plugins" && cp -u "$HERE/plugins/"*.so "$DATA/plugins/" 2>/dev/null; fi
+LOG="$DATA/log.txt"
+: >"$LOG" 2>/dev/null || LOG=/dev/null
+# The Zero's desktop is labwc (Wayland), which holds the display: SDL goes through Wayland when its socket is there, else
+# KMSDRM (a console without the desktop). (As M5Stack's SDL2 examples, CardputerZero-AppBuilder.)
+if [ -z "${XDG_RUNTIME_DIR:-}" ] && [ -d "/run/user/$(id -u)" ]; then XDG_RUNTIME_DIR="/run/user/$(id -u)"; export XDG_RUNTIME_DIR; fi
+if [ -z "${SDL_VIDEODRIVER:-}" ]; then
+  if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    for c in wayland-0 wayland-1; do [ -S "$XDG_RUNTIME_DIR/$c" ] && { WAYLAND_DISPLAY=$c; export WAYLAND_DISPLAY; break; }; done
+  fi
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then SDL_VIDEODRIVER=wayland; elif [ -e /dev/dri/card0 ]; then SDL_VIDEODRIVER=kmsdrm; fi
+  [ -n "${SDL_VIDEODRIVER:-}" ] && export SDL_VIDEODRIVER
+fi
+echo "fune: video ${SDL_VIDEODRIVER:-(SDL's choice)}, data $DATA" >>"$LOG"
+exec "$HERE/bin/kreisel" --profile zero --fullscreen "$@" >>"$LOG" 2>&1

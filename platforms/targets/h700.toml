@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "H700 handhelds (Anbernic RG35XX and the like, PortMaster)"
+status = "target"          # not tried on a device (none at hand)
+# the SDL2 build in an arm64 container: platforms/portmaster/build.sh (--profile h700)
+
+[screen]
+size = [320, 240]          # drawn at 2 x on its 640 x 480: the text twice the FM-1's (the a11y audit 2026-11-12)
+
+[controls]
+input = ["pad"]
+shown = 4

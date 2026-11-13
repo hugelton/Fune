@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "the browser's audio worklet"
+status = "kept"            # deprecated
+
+[build]
+groups = ["core", "audio", "fx"]
+sources = ["platforms/web/kreisel_audio_web.c"]

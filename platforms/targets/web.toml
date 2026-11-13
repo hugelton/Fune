@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "the browser: the screen's module (no audio host: the sound runs in the worklet's, web_audio)"
+status = "kept"            # deprecated
+profile = "handheld"
+
+[build]
+groups = ["core", "audio", "fx", "ui"]   # (audio: the core names its tables, the drum lanes' notes and the built-in engines; the sound itself runs in the worklet's module)
+sources = ["platforms/web/kreisel_web.c"]

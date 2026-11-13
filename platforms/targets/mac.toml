@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "macOS (the SDL2 app, Fune.app)"
+status = "target"
+# built by CMake (platforms/sdl, eight tracks: KREISEL_APP_TRACKS); started with no --profile
+
+[screen]
+size = [640, 360]          # units, drawn at the window's pixels
+
+[controls]
+input = ["pad", "touch", "keyboard", "mouse"]
+shown = 4

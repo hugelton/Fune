@@ -1,0 +1,49 @@
+name: core
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure core-only
+        run: cmake -S . -B build -DKREISEL_BUILD_SDL=OFF -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+  sdl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL2 and the font tools
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libasound2-dev python3-pil python3-fonttools libraqm0
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test (the panel test runs on SDL's dummy video driver)
+        run: ctest --test-dir build --output-on-failure
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL2 and the font tools
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libasound2-dev python3-pil python3-fonttools libraqm0
+      - name: "Configure (Release: what ships; the tests keep their asserts)"
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+  tracks8:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure core-only, eight tracks (the desktop's count)
+        run: cmake -S . -B build -DKREISEL_BUILD_SDL=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS=-DK_TRACKS=8
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

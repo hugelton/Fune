@@ -1,0 +1,202 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<!-- Fune for a touch screen (a phone, a tablet), as a web app: the whole window is Fune's screen, touched directly.
+     The UI and the core are dist/kreisel.js (kreisel_web.c); the sound runs in an AudioWorklet (dist/kreisel_audio.js,
+     worklet.js). Songs and presets are kept in this browser. Alpha. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Fune">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Fune</title>
+<style>
+  :root { --bg: #0b0b0c; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; touch-action: none;
+               -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+  #stage { position: fixed; left: env(safe-area-inset-left); top: env(safe-area-inset-top);
+           right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom);
+           display: flex; align-items: center; justify-content: center; }
+  #screen { display: block; touch-action: none; }   /* (its size: fit(), the proportions kept) */
+  #msg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 24px;
+         color: #c2c6cc; font: 15px/1.5 -apple-system, system-ui, sans-serif; text-align: center; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="screen"></canvas></div>
+<div id="msg"></div>
+<script src="dist/kreisel_audio.js"></script>
+<script src="dist/kreisel.js"></script>
+<script>
+"use strict";
+const cv = document.getElementById('screen'), ctx = cv.getContext('2d'), msg = document.getElementById('msg');
+const store = { get(k, d) { try { const v = localStorage.getItem('fune.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+                set(k, v) { try { localStorage.setItem('fune.' + k, JSON.stringify(v)); } catch (e) {} } };
+const fail = t => { msg.style.display = 'flex'; msg.textContent = t; };
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+(typeof KreiselModule === 'undefined' ? Promise.reject(new Error('no kreisel.js')) : KreiselModule()).then(M => {
+  const f = {};
+  const fn = (name, ret, args) => f[name] = M.cwrap('kw_' + name, ret, args);
+  fn('init_touch', 'number', ['number', 'number', 'number']); fn('resize_touch', 'number', ['number', 'number', 'number']);
+  fn('touch', null, ['number', 'number', 'number', 'number']); fn('wheel', null, ['number', 'number', 'number', 'number']);
+  fn('frame', 'number', ['number']); fn('rgba', 'number', []); fn('canvas_w', 'number', []); fn('canvas_h', 'number', []);
+  fn('app_ptr', 'number', []); fn('app_size', 'number', []); fn('take_note', 'number', []); fn('playhead', null, ['number']);
+  fn('store_slot', 'number', ['number', 'number']); fn('store_cap', 'number', []); fn('store_put', null, ['number', 'number', 'number']);
+  fn('store_start', 'number', ['number']); fn('demo', 'number', []);
+  const now = () => Math.floor(performance.now()) >>> 0;
+
+  /* ---- the screen: one fixed size in units, 640 x 480 (the page 640 x 360 as the desktop's, the surface 120 under it), scaled
+   * to the window with its proportions kept and centred (few resolutions, every layout seen as made). Pixels
+   * a unit (s): whole, enough for the scale and the device's pixel ratio; the browser scales the rest ---- */
+  const UW = 640, UH = 520;   // (at least 640 across, 520 high: the page 360 high, the surface 160 under it: fitted to the height, contain)
+  const DESK = window.matchMedia('(pointer: fine)').matches;   // (a mouse: a desktop browser)
+  let U = { w: 0, h: 0, s: 1 };
+  function measure() {
+    const st = document.getElementById('stage').getBoundingClientRect(), W = st.width, H = st.height, dpr = window.devicePixelRatio || 1;
+    const k = Math.min(W / UW, H / UH);   // (fitted to the height; a wider window: more units across, no bars at the sides)
+    const w = Math.max(UW, Math.floor(W / k));
+    const s = Math.max(1, Math.min(4, Math.ceil(dpr * k - 0.05)));
+    return { w, h: UH, s, cssW: Math.floor(w * k), cssH: Math.floor(UH * k) };
+  }
+  function place(m) { cv.style.width = m.cssW + 'px'; cv.style.height = m.cssH + 'px'; }
+  function fit(first) {
+    const m = measure();
+    place(m);
+    if (!first && m.w === U.w && m.h === U.h && m.s === U.s) return;
+    U = m;
+    if (first) f.desktop(DESK ? 1 : 0);
+    if (!(first ? f.init_touch(m.w, m.h, m.s) : f.resize_touch(m.w, m.h, m.s))) { fail('Could not start: not enough memory.'); return; }
+    cv.width = m.w * m.s; cv.height = m.h * m.s;   // (the canvas is made at the next frame: its size is known from here)
+    img = ctx.createImageData(cv.width, cv.height);
+    dirty = true;
+  }
+  let img = null, dirty = true, busy = true;
+  function draw() {
+    busy = !!f.frame(now());
+    const p = f.rgba(), n = cv.width * cv.height * 4;
+    if (f.canvas_w() !== cv.width || f.canvas_h() !== cv.height) return;   // (a frame drawn before the new size took)
+    img.data.set(M.HEAPU8.subarray(p, p + n));
+    ctx.putImageData(img, 0, 0);
+  }
+  function loop() { audioPump(); if (dirty || busy) { dirty = false; draw(); } requestAnimationFrame(loop); }
+
+  /* ---- every finger (or a mouse) on the screen, in units: the surface keeps what each holds (draw_surface.c) ---- */
+  fn('finger', null, ['number', 'number', 'number', 'number', 'number']);
+  const at = e => { const r = cv.getBoundingClientRect(); return [Math.floor((e.clientX - r.left) / r.width * U.w), Math.floor((e.clientY - r.top) / r.height * U.h)]; };
+  const fingers = new Set();
+  /* a desktop browser (a mouse: a fine pointer): the Mac app's ways too (platforms/sdl/input.c): hover, option-click to the
+   * default, a right click for what is under the pointer, the wheel, the keyboard (kw_key: a pad's keys, Space, T, Cmd+C V Z S,
+   * the computer's keys as a keyboard z s x d c ..) */
+  fn('desktop', null, ['number']); fn('hover', null, ['number', 'number', 'number']); fn('click', 'number', ['number', 'number', 'number', 'number']);
+  fn('right', null, ['number', 'number', 'number']); fn('key', 'number', ['number', 'number', 'number', 'number', 'number']);
+  const PAGE_H = 360;   // (the page's height in units: the mouse's own ways are for the page, not the surface)
+  const held = new Set();   // (pointers taken by a click here: their drag and release go nowhere)
+  cv.addEventListener('pointerdown', e => {
+    e.preventDefault(); audioWake();
+    const [x, y] = at(e);
+    if (e.pointerType === 'mouse' && e.button === 2) { if (y < PAGE_H) { f.right(x, y, now()); dirty = true; } return; }
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    cv.setPointerCapture(e.pointerId);
+    if (DESK && e.pointerType === 'mouse' && y < PAGE_H && f.click(x, y, e.altKey ? 1 : 0, now())) { held.add(e.pointerId); dirty = true; return; }
+    fingers.add(e.pointerId);
+    f.finger(e.pointerId, 0, x, y, now()); dirty = true; audioPump();
+  });
+  cv.addEventListener('pointermove', e => {
+    const [x, y] = at(e);
+    if (DESK && e.pointerType === 'mouse') { f.hover(y < PAGE_H ? x : -1, y < PAGE_H ? y : -1, e.buttons & 1); dirty = true; }
+    if (!fingers.has(e.pointerId)) return;
+    f.finger(e.pointerId, 1, x, y, now()); dirty = true; audioPump();
+  });
+  const up = e => {
+    held.delete(e.pointerId);
+    if (!fingers.has(e.pointerId)) return;
+    fingers.delete(e.pointerId);
+    const [x, y] = at(e); f.finger(e.pointerId, 2, x, y, now()); dirty = true; audioPump();
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('pointerleave', e => { if (DESK && e.pointerType === 'mouse') { f.hover(-1, -1, 0); dirty = true; } });
+  cv.addEventListener('wheel', e => {   // the value under the pointer turns (up: more)
+    e.preventDefault();
+    const [x, y] = at(e);
+    if (y < PAGE_H && e.deltaY) { f.wheel(x, y, e.deltaY < 0 ? 1 : -1, now()); dirty = true; audioPump(); }
+  }, { passive: false });
+  addEventListener('contextmenu', e => e.preventDefault());
+  const KEYS = { ArrowUp: 1000, ArrowDown: 1001, ArrowLeft: 1002, ArrowRight: 1003, Enter: 1004, Escape: 1005, Tab: 1006, ' ': 1007,
+                 Delete: 1008, Backspace: 1008, PageUp: 1009, PageDown: 1010, '+': 1011, '=': 1011, '-': 1012 };
+  const code = e => KEYS[e.key] || (e.key.length === 1 ? e.key.toLowerCase().charCodeAt(0) : 0);
+  const mods = e => (e.metaKey || e.ctrlKey ? 1 : 0) | (e.shiftKey ? 2 : 0) | (e.altKey ? 4 : 0);
+  if (DESK) {
+    addEventListener('keydown', e => {
+      audioWake();
+      const k = code(e);
+      if (k && f.key(k, 1, e.repeat ? 1 : 0, mods(e), now())) { e.preventDefault(); dirty = true; audioPump(); }
+    });
+    addEventListener('keyup', e => {
+      const k = code(e);
+      if (k && f.key(k, 0, 0, mods(e), now())) { e.preventDefault(); dirty = true; audioPump(); }
+    });
+  }
+
+  /* ---- the sound : the KApp's bytes and the live notes to the worklet; it answers the playhead ---- */
+  const au = { ctx: null, node: null, ready: false, last: null };
+  window.funeAudio = au; window.fune = { f, M, U: () => U, draw: () => draw() };   // (for a look from the console)
+  function audioPump() {
+    const notes = [];
+    for (let n; (n = f.take_note()) >= 0;) notes.push([n >> 16, (n >> 8) & 255, n & 255]);
+    if (!au.ready) return;
+    const cur = new Uint8Array(M.HEAPU8.buffer, f.app_ptr(), f.app_size());
+    let same = au.last !== null;
+    if (same) for (let i = 0; i < cur.length; i++) if (cur[i] !== au.last[i]) { same = false; break; }
+    if (same && !notes.length) return;
+    const m = {}, tr = [];
+    if (!same) { au.last = cur.slice(); m.app = au.last.buffer.slice(0); tr.push(m.app); }
+    if (notes.length) m.notes = notes;
+    au.node.port.postMessage(m, tr);
+  }
+  async function audioStart() {
+    if (au.ctx || !window.AudioContext || !window.KREISEL_AUDIO_WASM || !window.AudioWorkletNode) return;
+    try {
+      au.ctx = new AudioContext({ latencyHint: 'interactive' });
+      const url = URL.createObjectURL(new Blob([window.KREISEL_WORKLET], { type: 'text/javascript' }));
+      await au.ctx.audioWorklet.addModule(url); URL.revokeObjectURL(url);
+      au.node = new AudioWorkletNode(au.ctx, 'kreisel', { numberOfInputs: 0, outputChannelCount: [2] });
+      au.node.port.onmessage = ({ data }) => {
+        if (data.ready) { au.ready = true; au.last = null; audioPump(); }
+        else if (data.error) console.warn('fune audio:', data.error);
+        else if ('step' in data && data.step >= 0) { f.playhead(data.step); dirty = true; }
+      };
+      au.node.connect(au.ctx.destination);
+      const b = atob(window.KREISEL_AUDIO_WASM), w = new Uint8Array(b.length);
+      for (let i = 0; i < b.length; i++) w[i] = b.charCodeAt(i);
+      au.node.port.postMessage({ wasm: w.buffer }, [w.buffer]);
+      await au.ctx.resume();
+    } catch (e) { console.warn('fune audio unavailable:', e); }
+  }
+  function audioWake() { if (!au.ctx) audioStart(); else if (au.ctx.state !== 'running') au.ctx.resume(); }   // (a browser starts sound on a touch only)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && au.ctx) au.ctx.resume(); dirty = true; });
+
+  /* ---- start: the screen, SAVE's slots kept in this browser, the song saved last or (nothing saved yet) the demo ---- */
+  fit(true);
+  const b64 = u => { let s = ''; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); };
+  const unb64 = t => { const s = atob(t), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
+  let any = false;
+  [[0, 6], [1, 24]].forEach(([k, n]) => { for (let i = 0; i < n; i++) {
+    const t = store.get('slot.' + k + '.' + i, null);
+    if (!t) continue;
+    try { const u = unb64(t); if (u.length <= f.store_cap()) { M.HEAPU8.set(u, f.store_slot(k, i)); f.store_put(k, i, u.length); if (k === 0) any = true; } } catch (e) {}
+  } });
+  M.kreiselStored = (k, i, bytes, latest) => { if (bytes) store.set('slot.' + k + '.' + i, b64(bytes)); else { try { localStorage.removeItem('fune.slot.' + k + '.' + i); } catch (e) {} } store.set('latest', latest); };
+  if (f.store_start(store.get('latest', -1)) !== 0 && !any) f.demo();
+  addEventListener('resize', () => fit(false));
+  draw(); draw(); loop();   // (the first frame places the focus rectangles)
+}).catch(e => fail('Fune could not start here (' + e.message + ').'));
+</script>
+</body>
+</html>

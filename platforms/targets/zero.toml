@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "M5Stack Cardputer Zero"
+status = "target"
+# the SDL2 build on its Linux (to come)
+
+[screen]
+size = [320, 170]          # 1.9 in
+
+[controls]
+input = ["keyboard"]       # 46 keys, no touch
+shown = 4

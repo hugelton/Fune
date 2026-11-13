@@ -1,0 +1,170 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MPL-2.0
+     Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+     Songs and presets between the FM-1 and a computer, in a browser (Chrome, Edge: Web Serial). The same console commands as
+     fm1_slots.py (fm1_console.c: slots, slotget, slotdata, songput, songdata, slotput); a .fune file is a slot's bytes as kept.
+     docs/TRANSFER.md. Open this file in Chrome (file:// works), connect, pick the FM-1's port. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fune Transfer</title>
+<style>
+  :root { --bg: #111214; --surf: #1c1d20; --line: #2c2d31; --text: #ececee; --mid: #9a9aa0; --acc: #c2c6cc; --rec: #ff5a50; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; } p.sub { color: var(--mid); margin: 0 0 20px; }
+  button { background: var(--surf); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button.primary { background: var(--acc); color: #111; border-color: var(--acc); }
+  button:disabled { opacity: .4; cursor: default; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+  #state { color: var(--mid); }
+  section { background: var(--surf); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+  section h2 { font-size: 14px; color: var(--mid); font-weight: 600; margin: 0 0 8px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 5px 4px; border-top: 1px solid var(--line); } td.n { width: 2.5em; color: var(--mid); } td.a { text-align: right; white-space: nowrap; }
+  .empty { color: var(--mid); }
+  #log { white-space: pre-wrap; color: var(--mid); font: 12px/1.4 ui-monospace, Menlo, monospace; max-height: 160px; overflow: auto; }
+  .err { color: var(--rec); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Fune Transfer</h1>
+  <p class="sub">Songs and presets between the FM-1 and this computer, as .fune files (the desktop Fune opens them too).</p>
+  <div class="bar">
+    <button id="connect" class="primary">Connect</button>
+    <button id="refresh" disabled>Refresh</button>
+    <span id="state">Not connected</span>
+  </div>
+  <section><h2>Songs</h2><table id="song"></table></section>
+  <section><h2>Presets</h2><table id="preset"></table></section>
+  <section><h2>Log</h2><div id="log"></div></section>
+  <input type="file" id="file" accept=".fune" hidden>
+</main>
+<script>
+"use strict";
+const SLOTS = { song: 6, preset: 24 }, KIND_OF = { KRSG: "song", KRSP: "preset" };
+let port = null, reader = null, writer = null, inbuf = "", busy = false;
+const $ = (id) => document.getElementById(id);
+const log = (s, err) => { const d = document.createElement("div"); d.textContent = s; if (err) d.className = "err"; $("log").append(d); $("log").scrollTop = 1e9; };
+
+function crc16(b) { let c = 0xFFFF; for (const x of b) { c ^= x << 8; for (let k = 0; k < 8; k++) c = c & 0x8000 ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF; } return c; }
+const CRC32T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (const x of b) c = CRC32T[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+const r16 = (b, i) => b[i] | b[i + 1] << 8;
+const hex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+
+/* a song or preset file as the loader checks it: [kind, name, its own bytes] (fm1_slots.py file_info) */
+function fileInfo(d) {
+  const tag = String.fromCharCode(...d.slice(0, 4));
+  if (d.length < 10 || !KIND_OF[tag]) throw new Error("not a Fune song or preset");
+  if (r16(d, 4) !== 1) throw new Error("a format version this page does not know");
+  const end = 8 + r16(d, 6);
+  if (end + 2 > d.length) throw new Error("cut short");
+  if (crc16(d.slice(0, end)) !== r16(d, end)) throw new Error("damaged (its CRC does not match)");
+  let pos = 8, name = "", trak = false;
+  while (pos < end) {
+    if (end - pos < 6) throw new Error("damaged");
+    const t = String.fromCharCode(...d.slice(pos, pos + 4)), n = r16(d, pos + 4);
+    if (pos + 6 + n > end) throw new Error("damaged");
+    if (t === "NAME") name = String.fromCharCode(...d.slice(pos + 6, pos + 6 + n)).replace(/\0.*$/, "").trim();
+    if (t === "TRAK" && n >= 9) trak = true;
+    pos += 6 + n;
+  }
+  const kind = KIND_OF[tag];
+  if (kind === "preset" && !trak) throw new Error("a preset with no engine in it");
+  return [kind, name, d.slice(0, end + 2)];
+}
+
+async function ask(cmd, timeout = 1500) {   /* one command, its one-line reply ("" when none came) */
+  await writer.write(new TextEncoder().encode(cmd + "\r"));
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    const nl = inbuf.indexOf("\n");
+    if (nl >= 0) { const line = inbuf.slice(0, nl).trim(); inbuf = inbuf.slice(nl + 1); if (line) return line; continue; }
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return "";
+}
+async function pump() {
+  const dec = new TextDecoder();
+  try { for (;;) { const { value, done } = await reader.read(); if (done) break; inbuf += dec.decode(value); } } catch (e) { /* closed */ }
+}
+async function connect() {
+  if (!("serial" in navigator)) { log("This browser has no Web Serial: use Chrome or Edge.", true); return; }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    await port.setSignals({ dataTerminalReady: true });   /* (the FM-1 speaks only while DTR is up) */
+    writer = port.writable.getWriter(); reader = port.readable.getReader(); pump();
+    await new Promise((r) => setTimeout(r, 150)); inbuf = "";
+    $("state").textContent = "Connected"; $("refresh").disabled = false; $("connect").disabled = true;
+    await list();
+  } catch (e) { log("Connect: " + e.message, true); }
+}
+function row(kind, n, name) {
+  const tr = document.createElement("tr"), empty = name === "-";
+  tr.innerHTML = `<td class="n">${n}</td><td class="${empty ? "empty" : ""}"></td><td class="a"></td>`;
+  tr.children[1].textContent = empty ? "(empty)" : name === "*" ? "(no name)" : name.replace(/_/g, " ");
+  const pull = document.createElement("button"), push = document.createElement("button");
+  pull.textContent = "Pull"; pull.disabled = empty; pull.onclick = () => run(() => doPull(kind, n));
+  push.textContent = "Push"; push.onclick = () => pickAndPush(kind, n);
+  tr.children[2].append(pull, " ", push);
+  return tr;
+}
+async function run(f) { if (busy) return; busy = true; try { await f(); } catch (e) { log(e.message, true); } busy = false; }
+async function list() {
+  await run(async () => {
+    const r = await ask("slots");
+    if (!r.startsWith("ok")) throw new Error("slots: " + (r || "no reply"));
+    for (const [kind, short] of [["song", "s"], ["preset", "p"]]) {
+      const t = $(kind); t.textContent = "";
+      for (let n = 1; n <= SLOTS[kind]; n++) { const m = r.match(new RegExp(`\\b${short}${n}=(\\S+)`)); t.append(row(kind, n, m ? m[1] : "-")); }
+    }
+  });
+}
+async function doPull(kind, n) {
+  let r = await ask(`slotget ${kind} ${n}`);
+  let m = r.match(/^ok bytes=(\d+) crc=0x([0-9A-Fa-f]{8})/);
+  if (!m) throw new Error("slotget: " + (r || "no reply"));
+  const total = +m[1], crc = parseInt(m[2], 16), data = new Uint8Array(total);
+  let got = 0;
+  while (got < total) {
+    r = await ask(`slotdata ${got}`);
+    m = r.match(/^ok (\d+) ([0-9A-Fa-f]+)$/);
+    if (!m || +m[1] !== got) throw new Error(`slotdata ${got}: ` + (r || "no reply"));
+    for (let i = 0; i < m[2].length; i += 2) data[got++] = parseInt(m[2].slice(i, i + 2), 16);
+  }
+  if (crc32(data) !== crc) throw new Error("the bytes came over damaged (CRC-32): try again");
+  const [k, name] = fileInfo(data);
+  if (k !== kind) throw new Error(`slot ${n} holds a ${k}, not a ${kind}`);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
+  a.download = (name.replace(/[^A-Za-z0-9.-]+/g, "_").replace(/^_+|_+$/g, "") || kind + n) + ".fune";
+  a.click(); URL.revokeObjectURL(a.href);
+  log(`${kind} ${n} (${name || "no name"}, ${total} bytes) pulled`);
+}
+let pushTo = null;
+function pickAndPush(kind, n) { pushTo = [kind, n]; $("file").value = ""; $("file").click(); }
+$("file").onchange = () => run(async () => {
+  const f = $("file").files[0]; if (!f || !pushTo) return;
+  const [kind, n] = pushTo, [k, name, data] = fileInfo(new Uint8Array(await f.arrayBuffer()));
+  if (k !== kind) throw new Error(`${f.name} is a ${k}: push it to a ${k} slot`);
+  let r = await ask(`songput ${data.length}`);
+  if (r !== "ok") throw new Error("songput: " + (r || "no reply"));
+  for (let i = 0; i < data.length; i += 24) {   /* (a console line holds 64 characters) */
+    r = await ask("songdata " + hex(data.slice(i, i + 24)));
+    if (r !== `ok n=${Math.min(i + 24, data.length)}`) throw new Error(`songdata at ${i}: ` + (r || "no reply"));
+  }
+  r = await ask(`slotput ${kind} ${n} 0x${crc32(data).toString(16).toUpperCase().padStart(8, "0")}`, 5000);   /* (a flash erase and write) */
+  if (!r.startsWith("ok")) throw new Error("slotput: " + (r || "no reply"));
+  log(`${f.name} (${name || "no name"}, ${data.length} bytes) pushed to ${kind} ${n}`);
+  pushTo = null;
+  busy = false; await list();
+});
+$("connect").onclick = connect;
+$("refresh").onclick = list;
+</script>
+</body>
+</html>

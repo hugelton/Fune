@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
+# One target: what it builds ([build]: tools/kbuild.py), its screen and its controls ([screen], [controls]: the profile table
+# src/ui/profiles_gen.h, made by tools/kbuild.py --profiles). The fields: platforms/targets/README.md.
+
+name = "M-VAVE FM-1"
+status = "target"          # the first (0.0.1 beta)
+
+# fm1_main.c is built apart, with the board support's include paths (platforms/fm1hw/build.sh)
+[build]
+groups = ["core", "audio", "fx", "ui", "plugin_image"]
+sources = ["platforms/fm1hw/fm1_rt.c"]
+[build.defines]
+KREISEL_PX16 = ""                  # the canvas in RGB565, as the panel: half the memory
+K_FX_POOL_BYTES = "40960"          # the inserts' room (a 0.27 s delay is 24 KB)
+K_SYS_VOICES = "16"                # the voices of the four tracks together (4 x 6 would be 24; the load guard lowers it further)
+PD_DLY_MAX_SAMPLES = "12000u"
+KREISEL_CURVE_W = "232"
+KREISEL_CURVE_H = "120"
+KREISEL_NO_LIBM = ""               # no FPU, no libm: the project's own float functions
+KREISEL_BITMAP_FONT = ""
+K_MUL_OUTLINE = "1"                # 64-bit products out of line: the CPU erratum (src/kreisel_mul.h)
+
+[screen]
+size = [240, 240]
+font = "bitmap"            # no FPU: the baked bitmaps
+
+[controls]
+input = ["knobs", "keys"]  # 4 encoders, 27 keys, 14 buttons
+knobs = 4
+shown = 4
+keys = ["K1", "K2", "K3", "K4", "OCT+", "OCT-", "SAVE"]   # by role: ARM1..4, OK, CANCEL, SAVE
+
+[layout]
+add = ["leds", "preset_pop", "usb_audio"]   # its LEDs; the preset's name as a balloon; its USB audio's level row
+drop = ["connect"]             # no Connect tab (its build has none)
