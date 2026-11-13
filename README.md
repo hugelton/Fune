@@ -1,12 +1,12 @@
 # Fune
 
-A small, multi-platform music studio.
+A small music studio for multiple platforms
 
 ![Fune on the M-VAVE FM-1 and the M5Stack Cardputer Zero](docs/images/screens.png)
 
 **Status: 0.0.1 Alpha, in development.** Song and preset files may still change between builds.
 
-**Install on an FM-1**: the [web installer](https://hugelton.github.io/Fune/) (Chrome or Edge on a computer, over USB).
+**Install on an FM-1**: the [web installer](https://hugelton.com/fune/install/) (Chrome or Edge on a computer, over USB).
 
 | Platform | Status |
 | --- | --- |
