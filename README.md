@@ -12,10 +12,10 @@ A small music studio for multiple platforms
 | --- | --- |
 | M-VAVE FM-1 | Beta |
 | M-VAVE SMK-37 Pro / Elite | Alpha |
-| macOS, Linux | runs (eight tracks) |
-| Web (desktop, tablet) | Alpha |
+| macOS, Linux | Planned |
+| Web (desktop, tablet) | Planned |
 | M5Stack Cardputer Zero | Alpha |
-| H700 handhelds (PortMaster) | Alpha |
+| H700 handhelds (PortMaster) | Planned |
 
 ## Features
 
