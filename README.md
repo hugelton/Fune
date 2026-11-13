@@ -10,7 +10,7 @@ A small music studio for multiple platforms
 
 | Platform | Status |
 | --- | --- |
-| M-VAVE FM-1 | the first target |
+| M-VAVE FM-1 | Beta |
 | M-VAVE SMK-37 Pro / Elite | Alpha |
 | macOS, Linux | runs (eight tracks) |
 | Web (desktop, tablet) | Alpha |
