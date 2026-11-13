@@ -5,7 +5,7 @@
 #   /usr/share/APPLaunch/bin/fune          the start script (Wayland, else KMSDRM: platforms/zero/fune)
 #   /usr/share/APPLaunch/applications/fune.desktop, share/images/fune.png (48 px)   the launcher's entry and icon
 # No systemd service: it is an app the launcher starts (as the user pi), not a daemon. Built from our own binary only
-# (closed source), in the same arm64 Debian container as platforms/zero/build.sh.
+# in the same arm64 Debian container as platforms/zero/build.sh.
 #   bash platforms/zero/build_deb.sh    ->  build/zero/fune_<version>_arm64.deb
 # On the Zero: sudo apt install ./fune_<version>_arm64.deb   (remove: sudo apt remove fune; songs and presets stay)
 set -euo pipefail
@@ -39,8 +39,8 @@ Maintainer: HUGELTON INSTRUMENTS <info@hugelton.com>
 Section: APPLaunch
 Priority: optional
 Depends: libsdl2-2.0-0, libasound2
-Homepage: https://hugelton.com
-Description: Fune $LABEL: a groovebox
+Homepage: https://hugelton.com/products/fune
+Description: Fune $LABEL, a small music studio for multiple platforms
  Four tracks of synths and drums, a step sequencer and effects, for the
  M5Stack Cardputer Zero. Alpha: not yet tried on a device.
 EOF

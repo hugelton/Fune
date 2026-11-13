@@ -9,3 +9,4 @@ platforms/web/dist/
 build_*/
 build_asan
 build_rel
+build_sim/

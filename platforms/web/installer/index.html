@@ -6,7 +6,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="icon-192.png">
-<title>Firmware Installer</title>
+<title>Fune Installer</title>
+<meta name="description" content="Install Fune, a small music studio for multiple platforms, on an M-VAVE FM-1 or SMK-37 over USB.">
+<meta property="og:title" content="Fune Installer">
+<meta property="og:description" content="A small music studio for multiple platforms">
+<meta property="og:image" content="https://hugelton.com/fune/install/screens.jpg">
+<meta property="og:url" content="https://hugelton.com/fune/install/">
+<meta name="twitter:card" content="summary_large_image">
 <style>
 /* Fune's own look: the device's black and greys, its green and red, a header like its screen's, steps as a strip */
 :root {
@@ -23,6 +29,7 @@ body { margin: 0; color: var(--text); font: 400 15px/1.55 system-ui, -apple-syst
 .bar b { color: var(--head); font-size: 1rem; font-weight: 600; letter-spacing: .01em; }
 .bar .tag { margin-left: auto; font-size: .8125rem; color: var(--mid); }
 main { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
+.hero { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 582; margin: 0 0 24px; border-radius: 12px; }
 .lead { color: var(--head); font-size: 1.375rem; font-weight: 600; line-height: 1.3; margin: 0 0 6px; }
 .sub { color: var(--mid); margin: 0 0 24px; }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 16px; padding: 0; list-style: none; }
@@ -30,6 +37,7 @@ main { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
 .steps li.on { background: var(--head); color: var(--bg); }
 .steps li.done { color: var(--go); }
 .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 16px; padding: 20px; margin-bottom: 12px; }
+.note { margin-bottom: 20px; }
 .panel h2 { color: var(--head); font-size: 1.0625rem; font-weight: 600; margin: 0 0 8px; }
 p { margin: 0 0 14px; }
 .panel > :last-child { margin-bottom: 0; }
@@ -68,8 +76,15 @@ footer p { margin: 0 0 6px; }
 <body>
 <div class="bar"><img src="icon-192.png" alt=""><b id="title">Installer</b><span class="tag">FM-1 · SMK-37</span></div>
 <main>
+  <img class="hero" src="screens.jpg" alt="Fune on the FM-1 and the Cardputer Zero">
   <p class="lead" id="lead">Install</p>
   <p class="sub">USB · Chrome or Edge · 1 minute</p>
+  <section class="panel note">
+    <h2>Before you install</h2>
+    <p>Fune is custom firmware (CFW). It replaces the device's own firmware. M-VAVE's updater puts the stock firmware back.</p>
+    <p>This is <span id="ver">an alpha</span>. It isn't finished, and song and preset formats may change.</p>
+  </section>
+
   <ol class="steps" id="steps"><li class="on">1 Connect</li><li>2 Install</li><li>3 Play</li></ol>
 
   <section class="panel" id="nomidi" hidden><p>Needs Chrome or Edge on a computer.</p></section>
@@ -129,6 +144,8 @@ async function loadList() {
     const r = await fetch("packages.json", { cache: "no-cache" });
     if (r.ok && (r.headers.get("content-type") || "").includes("json")) packages = await r.json();
   } catch (_) { packages = []; }
+  const v = packages.find((p) => p.version);
+  if (v) $("ver").textContent = `an alpha (${v.version.replace(/\s*alpha$/i, "")})`;
 }
 
 // a package from the server, its size, digest and identity checked (a missing file can come back as the site's home page)

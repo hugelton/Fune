@@ -1,0 +1,54 @@
+Fune for the Cardputer Zero -- Alpha, for M5Stack's emulator (@OS@)
+=====================================================================
+
+Fune is a groovebox: 4 tracks of synths and drums, a step sequencer, effects.
+This is the Cardputer Zero version, run inside M5Stack's Cardputer Zero emulator
+(the device's screen, 320 x 170, and its keyboard on your computer).
+
+ALPHA: tested in the emulator only, not on a Cardputer Zero. Things will break.
+
+1. Get M5Stack's emulator (MIT licence, not included here)
+   https://github.com/CardputerZero/Emulator/releases
+   @EMU_HOWTO@
+
+2. Start Fune in it
+   Unzip this folder anywhere, then in a terminal:
+     cd @DIR@
+     ./run.sh
+   run.sh looks for the emulator @EMU_WHERE@;
+   elsewhere: CZEMU=/path/to/the/emulator ./run.sh
+   (By hand: <emulator>/cardputer-emu /full/path/to/@LIB@)
+
+Keys (click the keys on the picture, or type on your keyboard)
+  F Z X C          cursor up, left, down, right (the orange arrows, no fn needed)
+  K L              value up / down
+  1 .. 0           pages: 1 HOME (mixer), 2 SEQ, 3 GLO, 4 SYNTH, 5 EDIT, 6 ENV, 7 LFO, 8 FX, 9 ARP, 0 every page
+                   (the same key again: the next page of its group)
+  OK (Return)      yes        del (Backspace)  no
+  Space            play / stop
+  ESC, HOME        back
+  , .              ALGORITHM: the pattern on SEQ, the engine, the effect, the settings' tabs
+  r REC   s SAVE   g settings   u undo   t tools   o p presets   [ ] octave
+  On the mixer (HOME): left / right the track, up / down its control.
+  SAVE: stop playback first ("Stop to save"). The song saved last opens at the next start.
+
+Files
+  Songs, presets and settings are kept in @DATA@
+  (the same folder Fune's desktop build uses).
+Sound: your computer's default output. MIDI: @MIDI@.
+
+Known limits
+  - Alpha, emulator only: the real device's speed, sound (ALSA) and keyboard are untested.
+  - Built against the emulator v1.0.0 (@EMU_REV@, LVGL 9.5); other emulator versions may not load it.
+  - Clicking the picture's keys very fast can drop a key.
+  - Quitting: close the emulator's window. Unsaved changes are lost (no auto-save).
+
+Fune @VERSION@, built @DATE@. Open source: MPL-2.0 (LICENSE.txt, LICENSING.md); the source at
+https://github.com/hugelton/Fune. Others' parts and their licences: THIRD_PARTY_NOTICES.txt.
+
+----
+日本語（要点）
+  Alpha版です。M5Stack の Cardputer Zero エミュレータでのみ動作確認しています（実機では未確認）。
+  1) エミュレータを上のURLから入手  2) このフォルダで ./run.sh
+  キー: F Z X C カーソル、K L 値、1..0 ページ、Space 再生、s 保存（停止中のみ）、ESC 戻る
+  保存先: @DATA@

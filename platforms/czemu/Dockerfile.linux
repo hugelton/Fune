@@ -1,0 +1,9 @@
+# Fune's library for M5Stack's Cardputer Zero emulator on Linux x86_64 (platforms/czemu/package.sh): Debian 12 amd64, the
+# generators' Python (3.11: tools/kbuild.py's tomllib; Pillow, fontTools: the fonts), SDL2's headers; for the check, what
+# M5Stack's Linux emulator build needs to start (SDL2, FreeType, libpng).
+# (amd64/debian: the legacy builder takes a local arm64 debian tag over --platform)
+FROM --platform=linux/amd64 amd64/debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      gcc libc6-dev make cmake pkg-config python3 python3-pil python3-fonttools libsdl2-dev file \
+      libsdl2-2.0-0 libfreetype6 libpng16-16 \
+    && rm -rf /var/lib/apt/lists/*
