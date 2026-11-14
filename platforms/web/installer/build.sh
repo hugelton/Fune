@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../.."
 OUT="${1:-build/installer}"
 rm -rf "$OUT" && mkdir -p "$OUT"
-cp platforms/web/installer/index.html platforms/web/installer/installer.js "$OUT/"
+cp platforms/web/installer/index.html platforms/web/installer/installer.js platforms/web/installer/page.js "$OUT/"
 cp platforms/web/icon-192.png platforms/web/installer/screens.jpg "$OUT/"
 cp LICENSE "$OUT/LICENSE.txt"
 python3 tools/make_notices.py firmware "$OUT/THIRD_PARTY_NOTICES.txt" >/dev/null

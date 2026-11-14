@@ -74,10 +74,10 @@ footer a + a { margin-left: 16px; }
 </style>
 </head>
 <body>
-<div class="bar"><img src="icon-192.png" alt=""><b id="title">Installer</b><span class="tag">FM-1 and SMK-37</span></div>
+<div class="bar"><img src="icon-192.png" alt=""><b>Fune</b><span class="tag">FM-1 and SMK-37</span></div>
 <main>
   <img class="hero" src="screens.jpg" alt="Fune on the FM-1 and the Cardputer Zero">
-  <p class="lead" id="lead">Install</p>
+  <p class="lead">Install Fune</p>
   <section class="panel note">
     <h2>Before you install</h2>
     <p>Fune is custom firmware (CFW). It replaces the device's own firmware. M-VAVE's updater puts the stock firmware back.</p>
@@ -114,112 +114,6 @@ footer a + a { margin-left: 16px; }
     <p>© 2026 HÜGELTON INSTRUMENTS</p>
   </footer>
 </main>
-<script type="module">
-import { Updater, productOf, logicalImage, modelOf, sha256hex, BLK } from "./installer.js";
-
-const NAME = "Fune";   // the product's shown name: one place
-const $ = (id) => document.getElementById(id);
-document.title = `${NAME} Installer`;
-$("title").textContent = NAME;
-$("lead").textContent = `Install ${NAME}`;
-function stepTo(n) { [...$("steps").children].forEach((li, i) => { li.className = i < n ? "done" : i === n ? "on" : ""; }); }
-
-let access = null, updater = null, dev = null, packages = [], chosen = null, busy = false;
-
-const EXPLAIN = {
-  notfound: "No device. Check the cable, close other MIDI apps, Connect again.",
-  model: "Wrong package for this device.",
-  stopped: "The device stopped. Nothing written. Replug and try again.",
-  lost: "Disconnected. Replug and press Install again.",
-  noloader: "Replug and press Install again.",
-  noreturn: "Turn the device off and on.",
-  mismatch: "Written, but not confirmed. Try once more.",
-  badreq: "Stopped: an unexpected request.",
-  badpkg: "Not a package for this device.",
-};
-
-function status(text, cls = "") { $("status").textContent = text; $("status").className = cls; }
-async function loadList() {
-  try {
-    const r = await fetch("packages.json", { cache: "no-cache" });
-    if (r.ok && (r.headers.get("content-type") || "").includes("json")) packages = await r.json();
-  } catch (_) { packages = []; }
-  const v = packages.find((p) => p.version);
-  if (v) $("ver").textContent = `an alpha (${v.version.replace(/\s*alpha$/i, "")})`;
-}
-
-// a package from the server, its size, digest and identity checked (a missing file can come back as the site's home page)
-async function fetchPackage(p) {
-  const r = await fetch(p.file, { cache: "no-cache" });
-  const raw = new Uint8Array(await r.arrayBuffer());
-  if (!r.ok || raw.length !== p.size || await sha256hex(raw) !== p.sha256 || productOf(raw) !== p.product)
-    throw Object.assign(new Error("Download failed. Reload and try again."), { code: "" });
-  return raw;
-}
-
-function showPackage() {
-  const p = chosen;
-  if (!p) { status("No package for this device.", "bad"); $("go").disabled = true; return; }
-  $("go").disabled = busy || !$("agree").checked;
-}
-
-$("find").onclick = async () => {
-  if (busy) return;
-  $("found").hidden = false;
-  $("found").textContent = "Looking…";
-  try {
-    if (!access) access = await navigator.requestMIDIAccess({ sysex: true });
-  } catch (_) {
-    $("found").textContent = "Allow MIDI access, then Connect again.";
-    return;
-  }
-  updater = updater || new Updater(access);
-  if (dev) { dev.link.close(); dev = null; }
-  dev = await updater.find();
-  if (!dev) { $("found").textContent = EXPLAIN.notfound; $("s2").hidden = true; return; }
-  const model = modelOf(dev.id.text), inUpdate = /^ota-/i.test(dev.id.model);
-  $("found").innerHTML = "";
-  const d = document.createElement("span"); d.className = "dev"; d.textContent = model;
-  if (!chosen || modelOf(chosen.product) !== model) chosen = packages.find((p) => modelOf(p.product) === model) || null;
-  $("found").append(d, chosen ? ` → build ${chosen.product.split("_").pop()}` : "");
-  if (chosen && chosen.alpha) { const a = document.createElement("span"); a.className = "badge"; a.textContent = "ALPHA"; $("found").append(" ", a); }
-  void inUpdate;
-  $("s2").hidden = false;
-  stepTo(1);
-  showPackage();
-};
-
-$("agree").onchange = showPackage;
-
-$("go").onclick = async () => {
-  if (busy || !dev || !chosen) return;
-  busy = true; $("go").disabled = true; $("find").disabled = true; $("bar").hidden = false; $("bar").value = 0;
-  try {
-    status("Downloading…");
-    const raw = chosen.raw || await fetchPackage(chosen);
-    if (modelOf(dev.id.text) !== modelOf(chosen.product)) throw Object.assign(new Error(EXPLAIN.model), { code: "model" });
-    const image = logicalImage(raw);
-    await updater.install(dev, image, chosen.product, (s, v) => {
-      if (s === "start" || s === "check") { status("Checking…"); $("bar").value = 3; }
-      else if (s === "loader") { status("Starting…"); $("bar").value = 6; }
-      else if (s === "write") { status(`Writing… ${v}%`); $("bar").value = 8 + Math.round(v * 0.88); }
-      else if (s === "reboot") { status("Restarting…"); $("bar").value = 97; }
-    });
-    $("bar").value = 100;
-    status("Done. Enjoy.", "ok");
-    stepTo(2);
-  } catch (e) {
-    status(EXPLAIN[e.code] || e.message, "bad");
-  } finally {
-    dev = null; busy = false; $("find").disabled = false;
-    
-    $("go").disabled = true;
-  }
-};
-
-if (!navigator.requestMIDIAccess || !window.isSecureContext) { $("nomidi").hidden = false; $("s1").hidden = true; }
-loadList();
-void BLK;
-</script>
+<script type="module" src="page.js"></script>
 </body>
 </html>
