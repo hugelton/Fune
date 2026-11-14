@@ -28,7 +28,7 @@ A small music studio for multiple platforms
 - **Presets and songs**: factory and user presets, songs saved on the device
 - **Tools**: fill, Euclid, random, shift, humanize, reverse, Dynamite, undo
 - **MIDI**: in and out, clock sync, MIDI learn on a computer
-- **Plugins**: synth engines and effects from outside the core (an SDK)
+- **Plugins**: synth engines and effects from outside the core (an SDK); the [Fune Library](https://hugelton.github.io/fune-library/) lists them
 
 ## Before you install on an FM-1
 
