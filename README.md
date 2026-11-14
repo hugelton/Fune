@@ -2,6 +2,8 @@
 
 A small music studio for multiple platforms
 
+<a href="https://hugelton.itch.io/fune"><img src="docs/images/itch-badge.svg" alt="Available on itch.io" height="40"></a>
+
 ![Fune on the M-VAVE FM-1 and the M5Stack Cardputer Zero](docs/images/screens.png)
 
 **Status: 0.0.1 Alpha, in development.** Song and preset files may still change between builds.
