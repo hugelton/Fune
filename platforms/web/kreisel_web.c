@@ -86,7 +86,7 @@ EMSCRIPTEN_KEEPALIVE void kw_touch(int phase, int x, int y, uint32_t now) { ui_t
 EMSCRIPTEN_KEEPALIVE void kw_wheel(int x, int y, int d, uint32_t now) { ui_wheel(&app, x, y, d, now); }
 EMSCRIPTEN_KEEPALIVE int kw_canvas_w(void) { return shown()->pw; }   /* the canvas in pixels (the scale applied) */
 EMSCRIPTEN_KEEPALIVE int kw_canvas_h(void) { return shown()->ph; }
-EMSCRIPTEN_KEEPALIVE int kw_demo(void) { return k_demo_load(&app); }   /* COLDWIRE (a first start with nothing saved) */
+EMSCRIPTEN_KEEPALIVE int kw_demo(void) { return k_demo_load(&app); }   /* the demo song (a first start with nothing saved) */
 EMSCRIPTEN_KEEPALIVE int kw_profile_count(void) { return k_profile_count(); }
 EMSCRIPTEN_KEEPALIVE const char *kw_profile_name(int i) { return k_profile_at(i)->name; }
 EMSCRIPTEN_KEEPALIVE int kw_profile_knobs(int i) { return k_profile_at(i)->knobs; }

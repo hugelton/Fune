@@ -597,6 +597,9 @@ static void fm1__breath_frame(void)               /* (a new frame, before column
  * (0..64 | FM1_ANIM_GLOW, written by the main loop at any time: a byte each) as the sweep draws its own, endless, and a key or
  * a button down does not end it. So the UI can fade any LED (a press flashing out, a breath while idle) */
 static volatile uint8_t fm1_led_lv[FM1_NKEY];
+/* Kreisel (2026-11-15): LEDs with no key under them (PLAY's green one), lit as a lit LED in the levels'
+ * frames: fm1_led_extra[col], packed row bits as fm1_led */
+static volatile uint8_t fm1_led_extra[FM1_NCOL];
 static uint16_t fm1__an_f;
 static uint8_t fm1__an_glow, fm1__an_idle, fm1__an_cb[FM1_NKEY], fm1__an_acc[FM1_NKEY];   /* each LED: column << 3 | row,
                                                                                             * its sigma-delta */
@@ -628,6 +631,8 @@ static __attribute__((noinline)) void fm1__anim_frame(void)
     for (i = 0; i < FM1_NCOL; i++) {
         fm1_led_dim[i] = d[i];
         fm1_led[i] = !idle && f >= FM1_ANIM_FRAMES ? 0u : l[i];
+        if (idle == 2u)
+            fm1_led[i] |= fm1_led_extra[i];
     }
     fm1__an_f = (uint16_t)(idle ? f + 1u : f >= FM1_ANIM_FRAMES ? 0u : f + 2u);   /* (the sweep's last picture stays for
                                                                                    * the UI to take over) */

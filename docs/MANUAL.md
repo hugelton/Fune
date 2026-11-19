@@ -26,12 +26,12 @@ written for the FM-1 first. The computer, the Cardputer Zero and handhelds with 
 
 Three rules hold everywhere:
 - **OCT- cancels** anything.
-- **A page button held + SELECT** opens that page's tools (see *Tools*).
+- **A page button held + SELECT** opens that page's tools (see *Tools*). SEQ held alone a moment opens them too.
 - **HOME held** opens the settings.
 
 ## First start
 
-On the first start Fune plays the demo song COLDWIRE. After that it opens the song you saved last, unless *Restore last* is
+On the first start Fune plays the demo song MURIYA. After that it opens the song you saved last, unless *Restore last* is
 off in the settings. Press PLAY to hear it.
 
 The top line of the screen shows:
@@ -53,7 +53,7 @@ The top line of the screen shows:
 ## Playing and recording
 
 - The keys play the track in hand. OCT+ / OCT- move the octave; HOME held + PRESETS does the same.
-- To record live, press REC, then PLAY. Notes go into the pattern as you play. A note's length is how long you held it.
+- To record live, press REC, then PLAY. Notes go into the pattern as you play, on the nearest step: a note played a little early lands on the beat. A note's length is how long you held it.
 - **The metronome** sounds only while recording. Turn it on in the settings' *Metro* tab. There you also choose its sound
   (Beep, Click, Wood) and whether a bar is counted in before recording starts.
 
@@ -104,6 +104,7 @@ The synth pages are SEL (the sound), EDIT, ENV 1 / ENV 2 and LFO.
 | Organ | nine drawbars, rotary, percussion and click; it plays as a gate (no envelope pages) |
 | Digital | two FM operators |
 | Drum | eight lanes of synthesised pieces (and three samples) |
+| Sampler | a WAV file across the keys, and recording (on a computer and the Cardputer Zero, not the FM-1) |
 
 There are 69 factory presets: 12 each for Retro, Trio, Lofi and Digital, 11 for Phase, 4 for Organ, and 6 drum kits. There
 are 24 user preset slots.
@@ -123,7 +124,7 @@ are 24 user preset slots.
 
 ## Tools
 
-A page button held + SELECT opens that page's tools and picks a row; let go, and the list stays open.
+A page button held + SELECT opens that page's tools and picks a row; let go, and the list stays open. On SEQ, holding the button for half a second opens them as well.
 - K1–K4 set the tool's values. You hear the result at once.
 - OCT+ does it; OCT- lets it go.
 
@@ -150,7 +151,7 @@ Songs and presets can be copied to and from a computer as `.fune` files ([TRANSF
 | Display | the LEDs (the FM-1), screen off, help |
 | System | restore last (open the last song at start), clear all (asks twice), about; on the FM-1, USB level (Fixed: full level whatever the volume knob; Volume: as the knob) |
 | Metro | the metronome, its sound, count-in |
-| Connect | MIDI in, channel, clock (internal or external); on a computer, *Learn* (below) |
+| Connect | MIDI in, channel, clock (internal or external); on a computer and the Zero, *Learn* and *Link* (below) |
 
 ## MIDI
 
@@ -166,6 +167,16 @@ Songs and presets can be copied to and from a computer as `.fune` files ([TRANSF
   3. Move the controller's knob.
 
   The mapping is saved in a profile per controller ([CONTROLLERS.md](CONTROLLERS.md)).
+
+## Ableton Link
+
+On a computer and on the Cardputer Zero, *Link* in the Connect tab joins Fune to the other Link apps on the same network
+(Ableton Live, phone and tablet apps). When others are there, the row shows how many ("2 peers").
+
+- **Tempo**: turned in Fune, the others follow; turned elsewhere, Fune follows (shown as a whole BPM).
+- **The bar**: the sequencer's first step falls on the session's bar.
+- **PLAY / STOP**: either side starts and stops both. Alone, PLAY starts at once; with others, on the next bar.
+- No count-in while Link is on. While the clock follows MIDI (*Clock: Follow*), Link rests.
 
 ## On a computer
 
@@ -185,6 +196,21 @@ wheel. The keyboard works as well.
 | Play / stop | the header's play | Space |
 
 A `.fune` file can be opened by dropping it on the window.
+
+### Sampler
+
+The Sampler plays one WAV file across the keys. Its files are in the samples folder: `~/Library/Application Support/Kreisel/samples`
+on macOS, `~/.local/share/kreisel/samples` on Linux and the Zero.
+
+| Action | Does |
+| --- | --- |
+| REC on its page | records from the input; again: stops, keeps it as `rec-DATE-TIME.wav` and plays it |
+| TOOLS, or a click on the file's name | the files: the one under the cursor plays at once, OK keeps it, Back puts the old one back |
+| PRESETS | the next or the previous file |
+| A WAV dropped on the window | copied into the folder and played |
+
+Its values: Start, End, Loop (Off, Fwd, Ping) and Loop st on the first row; Root (the key that plays the file at its own pitch),
+Tune, Dir and Key; Cutoff, Res, Type and Env; Level and Vel. A song and a user preset keep the file's name, not the sound.
 
 ## On the Cardputer Zero and on handhelds
 

@@ -276,6 +276,21 @@ int k_plugin_register(const KPlugin *p)
     return K_ENGINE_COUNT + nslot++;
 }
 
+#if K_WITH_SAMPLES
+/* an engine of the host's own that is not in every build (the Sampler: Linux and macOS): a synth with Hügelton's id, in a plugin's
+ * slot, registered by the platform at start */
+int k_plugin_register_host(const KPlugin *p)
+{
+    int i;
+    if ((i = k_plugin_check(p, 1)) != 0) return i;
+    if (p->kind != K_PLUG_SYNTH) return K_PLUG_E_KIND;
+    if (k_engine_find(p->desc->uid) >= 0) return K_PLUG_E_TAKEN;
+    if (nslot >= K_PLUGIN_SLOTS) return K_PLUG_E_FULL;
+    slot[nslot] = *p;
+    slot[nslot].size = sizeof(KPlugin);
+    return K_ENGINE_COUNT + nslot++;
+}
+#endif
 /* the engines by the registry: a track's sound is an index into it */
 int k_engine_count(void) { return k_plugin_count(); }
 const KEngine *k_engine_at(int index) { return k_plugin_at(index)->desc; }

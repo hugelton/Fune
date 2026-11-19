@@ -63,6 +63,10 @@ static track_t trk[NPART];
 #include "eng_kvector.c"        /* Kreisel's own VECTOR: a 2D wavetable morph (not in the MVP) */
 #endif
 #include "eng_kfm2.c"           /* Kreisel's own 2-operator FM */
+#if K_WITH_SAMPLES
+#include "eng_ksampler.c"       /* Kreisel's own Sampler (Linux and macOS only) */
+#include "sample/k_smp.h"
+#endif
 
 /* A track's engine is a plugin (kreisel_plugin.h, kreisel_engine_api.h): what kind it is says how it plays, its DSP how it sounds.
  * The built-in engines are records like any outside plugin's, with their DSP in them (here, where the engines are built); the
@@ -80,6 +84,52 @@ const KPlugin K_BUILTIN_PLUGINS[K_ENGINE_COUNT] = {
     K_BUILTIN_SYNTH(K_ENGINE_COUNT - 2, &ENG_KFM2),
     {sizeof(KPlugin), K_PLUGIN_ABI, 1, K_PLUG_DRUM, &K_ENGINE[K_ENGINE_COUNT - 1], 0, FS, 0, 0, 0, 0, 0}};   /* DRUM: its pieces are the host's (drum_kreisel.c) */
 _Static_assert(K_ENGINE_COUNT == 7 + K_WITH_ENSEMBLE + K_WITH_VECTOR, "K_BUILTIN_PLUGINS lists every built-in engine");
+#if K_WITH_SAMPLES
+/* the Sampler's record: not among the built-in engines (their table is the FM-1's too), registered by the platform as the host's
+ * own (k_plugin_register_host): its id is Hügelton's */
+static const char *const KSMP_N_LOOP[] = {"OFF", "FWD", "PING", 0};
+static const char *const KSMP_N_DIR[] = {"FWD", "REV", 0};
+static const char *const KSMP_N_TYPE[] = {"LP", "BP", "HP", 0};
+static const KEngine KSMP_DESC = {"Sampler", K_SAMPLER_UID, {"PLAY", "PITCH", ""}, {
+        {"STRT", KF_PCT, 0, 127, 0, 0, 0},
+        {"END", KF_PCT, 0, 127, 127, 0, 0},
+        {"LOOP", KF_ENUM, 0, 2, 0, KSMP_N_LOOP, 0},
+        {"LPST", KF_PCT, 0, 127, 0, 0, 0},
+        {"ROOT", KF_MNOTE, 0, 127, 60, 0, 0},
+        {"TUNE", KF_INT, -99, 99, 0, 0, "ct"},
+        {"DIR", KF_ENUM, 0, 1, 0, KSMP_N_DIR, 0},
+        {"KEY", KF_ONOFF, 0, 1, 1, 0, 0},
+        {"CUT", KF_CUTOFF, 0, 127, 127, 0, 0},
+        {"RES", KF_PCT, 0, 127, 0, 0, 0},
+        {"TYPE", KF_ENUM, 0, 2, 0, KSMP_N_TYPE, 0},
+        {"ENV", KF_LINK_FENV, 0, 100, 50, 0, 0},
+        {"LEVEL", KF_PCT, 0, 127, 110, 0, 0},
+        {"VEL", KF_PCT, 0, 127, 64, 0, 0},
+    }, 0, {0}, {0, 1, 8, 9}, 14, 8, K_NOMOD_SHAPE, 0};
+const KPlugin K_SAMPLER_PLUGIN = {sizeof(KPlugin), K_PLUGIN_ABI, 1, K_PLUG_SYNTH, &KSMP_DESC, &ENG_KSAMPLER, FS, 0, 0, 0, 0, 0};
+static uint32_t ksmp_gen = ~0u;
+static void ksmp_sync(void)   /* (k_audio_sync, the lock held) the tracks' samples to the parts, then the old ones may go */
+{
+    int t;
+    if (k_smp_gen() == ksmp_gen) return;
+    ksmp_gen = k_smp_gen();
+    for (t = 0; t < NPART; t++) {
+        const KSample *s = t < K_SMP_TRACKS ? k_smp_sample(t) : 0;
+        ksmp_b[t] = s ? (ksmp_bind_t){s->frames, s->nframes, s->rate, s->channels} : (ksmp_bind_t){0, 0, 0, 0};
+    }
+    k_smp_collect();
+}
+int k_audio_sampler_heads(int t, uint32_t *at, int max)
+{
+    int k, n = 0;
+    if (t < 0 || t >= NPART || !ksmp_b[t].f) return 0;
+    for (k = 0; k < NVOICE && n < max; k++) {
+        const voice_t *v = &trk[t].v[k];
+        if (v->active && !v->s[4] && v->s[0] >= 0 && (uint32_t)v->s[0] < ksmp_b[t].n) at[n++] = (uint32_t)v->s[0];
+    }
+    return n;
+}
+#endif
 /* The fallback: a track whose engine is not here (a plugin missing, or a synth with no DSP on this device) plays a plain sine, so
  * its notes are still heard (as a DAW plays a missing instrument's part with a default one); its own values are kept untouched. */
 static void ksine_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
@@ -215,6 +265,9 @@ void k_audio_sync(KAudio *a, const KApp *p)
     int t, s, i, lane;
     int want = p->playing != 0;
     bind(a);
+#if K_WITH_SAMPLES
+    ksmp_sync();
+#endif
     for(t = 0; t < K_TRACKS; t++) a->bend[t] = p->bend[t];
     scope_t = (uint8_t)(p->track >= 0 && p->track < K_TRACKS ? p->track : 0); /* effect instances and synth voices share the same single-audio-owner rule */
     for(i = 0; i < 2; i++) {   /* the buses' TONE and RTN (BUS 1 / BUS 2's third and fourth: one pair for the song) */
@@ -406,6 +459,35 @@ void k_audio_clock_tick(KAudio *a, uint32_t n)
         if (pulses >= div) a->arp_pending[t] = 1;
         a->arp_ext_acc[t] = (uint16_t)(pulses % div);
     }
+}
+
+/* where step k begins in the bar, in 16ths, Q16: an odd step later by the swing (duration_q16's even step is that much longer) */
+static int64_t step_at_q16(const KAudio *a, int k)
+{
+    return ((int64_t)k << 16) + ((k & 1) ? (int64_t)a->swing * 4 * 65536 / 1000 : 0);
+}
+
+void k_audio_phase_lock(KAudio *a, int64_t pos_q16, int64_t frames16_q16)
+{
+    const int64_t bar = (int64_t)K_STEPS << 16;
+    int64_t d;
+    if(!a->playing || a->ext || frames16_q16 <= 0) return;
+    pos_q16 %= bar; if(pos_q16 < 0) pos_q16 += bar;
+    a->count_left = 0;   /* (no bar counted in: the session's bar is the one to start on) */
+    d = step_at_q16(a, a->next_step) - pos_q16;
+    if(a->current_step < 0) {   /* started, no step yet: the step waits for its place in the session's bar (just past it: now) */
+        d %= bar; if(d < 0) d += bar;
+        if(d > bar - 8192) d = 0;   /* (late by under an eighth of a 16th: at once) */
+    } else {
+        d %= bar; if(d >= bar / 2) d -= bar; else if(d < -bar / 2) d += bar;
+        if(d < -32768 || d > (3 << 15)) {   /* far from where the session is (a jump, a tempo leap): on to the session's next step */
+            int k = 0;
+            while(k < K_STEPS && step_at_q16(a, k) < pos_q16) k++;
+            d = step_at_q16(a, k) - pos_q16;
+            a->next_step = k & (K_STEPS - 1);
+        }
+    }
+    a->frames_to_step = d * frames16_q16 >> 16;
 }
 
 /* the length of a step in frames, Q16. Swing stretches the even 16th and shortens the following odd 16th; the pair is unchanged. */

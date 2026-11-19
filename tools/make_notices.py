@@ -6,7 +6,9 @@
   tools/make_notices.py firmware OUT.txt   the FM-1 and SMK-37 packages (.fwsc): felucca-bsp (MPL-2.0), the JieLi AC79
                                            SDK's files (Apache-2.0), the fonts, the drum samples
   tools/make_notices.py host OUT.txt       the computer, Cardputer Zero, PortMaster and web builds: the fonts, the samples,
-                                           SDL2 (zlib) where it is bundled
+                                           SDL2 (zlib) where it is bundled, Ableton Link and asio (the SDL builds with Link,
+                                           cmake's KREISEL_LINK, on unless turned off)
+  tools/make_notices.py host OUT.txt --no-link   a host build without Link (the web's, or -DKREISEL_LINK=OFF)
 
 Every licence's full text is put in (from the files in the repository), with the notices as their authors wrote them."""
 import sys
@@ -14,6 +16,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BSP_SRC = "https://github.com/hugelton/felucca-bsp"
+FUNE_SRC = "https://github.com/hugelton/Fune"
+LINK_SRC = "https://github.com/Ableton/link"
 # where Fune's changes to felucca-bsp's files are published (MPL-2.0 section 3.2)
 BSP_FUNE_SRC = ("the changes Fune makes to its files are published in felucca-bsp's pull requests "
                   "https://github.com/hugelton/felucca-bsp/pull/38 (chip/usb.c), /pull/39 (boards/fm1/fm1_input.h) and "
@@ -45,11 +49,25 @@ def section(title, body):
 
 
 def main():
-    if len(sys.argv) != 3 or sys.argv[1] not in ("firmware", "host"):
+    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("firmware", "host") or sys.argv[3:] not in ([], ["--no-link"]):
         sys.exit(__doc__)
     kind, out = sys.argv[1], Path(sys.argv[2])
+    link = kind == "host" and sys.argv[3:] != ["--no-link"]
     parts = ["THIRD-PARTY NOTICES - Fune\n\nFune itself is under its own licence (LICENSE.txt). It contains the parts below, each "
              "under its own licence; nothing in Fune's licence limits what these licences allow you to do with these parts.\n\n"]
+    if link:
+        parts.append(section(
+            "Ableton Link (GNU General Public License, version 2 or later): this program as a whole is under the GPL",
+            "This build of Fune includes Ableton Link (the tempo, beat and start/stop sync over the network; the settings' Link "
+            "row). Link is under the GNU General Public License, version 2 or (at your option) any later version, so this "
+            "program, as a whole, is distributed under that licence; Fune's own files stay under the Mozilla Public License 2.0 "
+            "as well (its section 3.3).\n"
+            f"Source of this program, Link with it (third_party/link): {FUNE_SRC}\n"
+            f"Source of Link: {LINK_SRC} (the copy in Fune: Link-4.1.1)\n\n"
+            "Link's licence notice:\n\n" + text("third_party/link/LICENSE.md")))
+        parts.append(section("asio, as bundled with Ableton Link (Boost Software License 1.0)",
+                             text("third_party/link/modules/asio-standalone/COPYING") + "\n"
+                             + text("third_party/link/modules/asio-standalone/LICENSE_1_0.txt")))
     if kind == "firmware":
         parts.append(section(
             "felucca-bsp: the FM-1's hardware layer (Mozilla Public License 2.0)",
@@ -68,6 +86,8 @@ def main():
                          "the public domain under CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)."))
     if kind == "host":
         parts.append(section("SDL2 (zlib License): where it is bundled", ZLIB))
+    if link:
+        parts.append(section("GNU General Public License, version 2 (full text)", text("third_party/link/GNU-GPL-v2.0.md")))
     if kind == "firmware":
         parts.append(section("Mozilla Public License 2.0 (full text)", text("LICENSE")))
         parts.append(section("Apache License 2.0 (full text)", text("third_party/felucca-bsp/LICENSES/Apache-2.0.txt")))

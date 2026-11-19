@@ -345,6 +345,24 @@ int main(void){
         k=k_roll_at(&r,0,0,14,60);assert(k>=0 && r.roll[0][k].len==2);
         r.step=7;act(&r,K_ACT_KEY,4,1,6);act(&r,K_ACT_KEY,4,0,7);k=k_roll_at(&r,0,0,7,60);assert(k>=0 && r.roll[0][k].len==1);   /* a tap: a step */
     }
+    {   /* live REC rounds to the nearer step; the next step's note waits for the playhead, so it is not struck twice */
+        KApp r;int k;k_init(&r);k_open_page(&r,K_PAGE_ROLL);memset(r.roll,0,sizeof r.roll);memset(r.steps,0,sizeof r.steps);
+        assert(r.bpm==120);   /* (a 16th: 125 ms) */
+        act(&r,K_ACT_REC,0,0,1);r.playing=1;r.play_ms=750;k_tick(&r,1000);assert(r.step==2&&r.step_seen==2);
+        act(&r,K_ACT_KEY,4,1,1040);act(&r,K_ACT_KEY,4,0,1045);assert(k_roll_at(&r,0,0,2,60)>=0);   /* early in the step: on it */
+        act(&r,K_ACT_KEY,6,1,1080);assert(k_roll_at(&r,0,0,3,64)<0&&r.rec_wait_n==1);   /* late: the next step, kept back */
+        k_tick(&r,1110);assert(r.rec_wait_n==1);
+        k_tick(&r,1130);assert(r.step==3&&r.rec_wait_n==0&&(k=k_roll_at(&r,0,0,3,64))>=0&&r.roll[0][k].len==1);   /* written as it plays */
+        k_tick(&r,1400);act(&r,K_ACT_KEY,6,0,1400);assert(r.roll[0][k].len==2);   /* held: its length from the step it went to */
+        r.step_seen=-1;act(&r,K_ACT_KEY,4,1,1490);act(&r,K_ACT_KEY,4,0,1495);assert(r.rec_wait_n==0&&k_roll_at(&r,0,0,5,60)>=0);   /* (the step's start unseen: as before) */
+    }
+    {   /* SEQ held alone a while: its tools; the release leaves them open, the page as it was */
+        KApp t;k_init(&t);k_open_page(&t,K_PAGE_ROLL);
+        act(&t,K_ACT_PAGE_GROUP_DOWN,K_GROUP_PATTERN,0,1000);k_tick(&t,1400);assert(!t.tools_open);
+        k_tick(&t,1500);assert(t.tools_open&&t.page==K_PAGE_ROLL);
+        act(&t,K_ACT_PAGE_GROUP_UP,K_GROUP_PATTERN,0,1700);assert(t.tools_open&&t.page==K_PAGE_ROLL&&t.group_held==-1);
+        act(&t,K_ACT_PAGE_GROUP_DOWN,K_GROUP_PATTERN,0,2000);act(&t,K_ACT_PAGE_GROUP_UP,K_GROUP_PATTERN,0,2100);assert(t.page==K_PAGE_STEP);   /* a press still turns the page */
+    }
     {   /* ROLL (the FM-1's column): SELECT walks a chord's notes low to high before the next step, and back high to low */
         KApp r;k_init(&r);k_open_page(&r,K_PAGE_ROLL);
         assert(k_roll_add(&r,0,0,1,67,1,100)>=0&&k_roll_add(&r,0,0,1,60,1,100)>=0&&k_roll_add(&r,0,0,1,64,1,100)>=0);
@@ -666,6 +684,10 @@ int main(void){
         k_tick(&r,3500);assert(r.step==1);
         act(&r,K_ACT_PLAY,0,0,3600);act(&r,K_ACT_REC,0,0,3700);
         r.clock_src=1;act(&r,K_ACT_REC,0,0,3800);act(&r,K_ACT_PLAY,0,0,3900);assert(r.playing&&!r.count_in);   /* (an external clock: none) */
+#if K_WITH_CONNECT
+        act(&r,K_ACT_PLAY,0,0,4000);r.clock_src=0;r.link_peers=0;r.set_v[K_SET_LINK]=1;   /* (Ableton Link on: none, the session's bar is the start) */
+        act(&r,K_ACT_PLAY,0,0,4100);assert(r.playing&&r.recording&&!r.count_in);
+#endif
     }
     {   /* the settings as a cursor's sheet (the Zero): up / down the rows, left / right the value, ALGORITHM the tab; a knobs device's left /
          * right (none on the FM-1, a desktop's arrows): the rows */

@@ -434,7 +434,11 @@ int switch_synth_view(KApp *a)
                 const int i = r * 4 + c;
                 if (i >= en->nparams || (band == 0 && i >= en->page2)) break;
                 {   const int stack = 15 + 4 + 2 * sk_kr + sk_gap + 15, ly = by + 18 + (bh - 18 - stack) / 2;   /* (label, knob, value: centred) */
-                    sk_control(a, K_PAGE_SOUND, i, sx + sw * (2 * c + 1) / 8, ly, ly + 19 + sk_kr, ui_item_name(a, K_PAGE_SOUND, i), 1); }
+                    if (band) {   /* (EDIT's half: its label and value are EDIT's, the item SOUND's own i) */
+                        sk_base = en->page2;
+                        sk_control(a, K_PAGE_EDIT, i - en->page2, sx + sw * (2 * c + 1) / 8, ly, ly + 19 + sk_kr, ui_item_name(a, K_PAGE_EDIT, i - en->page2), 1);
+                        sk_base = -1;
+                    } else sk_control(a, K_PAGE_SOUND, i, sx + sw * (2 * c + 1) / 8, ly, ly + 19 + sk_kr, ui_item_name(a, K_PAGE_SOUND, i), 1); }
             }
         }
     }
@@ -504,21 +508,37 @@ static void osc_scopes(const KApp *a, const KEngine *en, int x, int y, int w, in
         g_curve16(&cv, p16, 49, 17, SK_LCD_WAVE);
     }
 }
+/* an engine label as a word, for the Zero's grid (its cells have room: "Detune", not "DTN"); else the label in word case */
+static const char *grid_word(const char *l)
+{
+    static const char *const W[][2] = {
+        {"DTN", "Detune"}, {"WAVE1", "Wave 1"}, {"WAVE2", "Wave 2"}, {"LVL", "Level"}, {"LVL1", "Level 1"}, {"LVL2", "Level 2"}, {"LVL3", "Level 3"},
+        {"SUBP", "Sub Oct"}, {"NOIS", "Noise"}, {"NLVL", "Noise Lvl"}, {"CUT", "Cutoff"}, {"RES", "Reso"}, {"DRV", "Drive"}, {"KTR", "KeyTrk"},
+        {"INT2", "Int 2"}, {"INT3", "Int 3"}, {"DCO1", "DCO 1"}, {"DCO2", "DCO 2"}, {"DCW1", "DCW 1"}, {"DCW2", "DCW 2"}, {"DCA1", "DCA 1"},
+        {"DCA2", "DCA 2"}, {"CRSH", "Crush"}, {"SRATE", "S.Rate"}, {"SWP", "Sweep"}, {"VIB", "Vibrato"}, {"FEED", "Feedback"}, {"ROTR", "Rotary"},
+        {"PERC", "Perc"}, {"VEL", "Velocity"}, {"ENV", "Env"}, {"MOD", "Mod"}, {"PW", "PW"}};
+    size_t k;
+    for (k = 0; k < sizeof W / sizeof W[0]; k++) if (!strcmp(W[k][0], l)) return W[k][1];
+    return wcase(l);
+}
 int wide_panel_view(KApp *a)
 {
     const int wx = whole.x, wy = whole.y, row = a->win / 4, t = a->track, mx = k_track_missing(a, t);
     const KPage pg = a->page;
     const KEngine *en = k_engine_at(a->sound[t]);
     const int n = pg == K_PAGE_LFO || pg == K_PAGE_ENV1 ? k_page_count(a, pg) : pg == K_PAGE_EDIT ? (mx ? 0 : en->nparams - en->page2) : (mx ? 0 : en->page2);
-    const int pitch = 56, vis = whole.h - 39 >= 3 * pitch - 8 ? 3 : 2;   /* (the rows in sight: three where the screen is tall, the H700's) */
+    /* grid: the Zero's short screen (170), SOUND and EDIT: every engine as one even grid, four across and three down, each cell
+     * its label over its knob with the value beside it (mockup A: the engines' own views were too crowded there) */
+    const int grid = cv.h < 180 && (pg == K_PAGE_SOUND || pg == K_PAGE_EDIT) && !drum_track(a) && !mx;
+    const int pitch = grid ? 38 : 56, vis = grid ? 3 : whole.h - 39 >= 3 * pitch - 8 ? 3 : 2;   /* (the rows in sight: three where the screen is tall, the H700's) */
     const int rows = (n + 3) / 4, r0 = row + vis > rows ? (rows - vis < 0 ? 0 : rows - vis) : row;
     int k, c, pk;
     if (cv.w < 300 || cv.w > 400 || cv.h > 240 || (pg != K_PAGE_SOUND && pg != K_PAGE_EDIT && pg != K_PAGE_LFO && !(pg == K_PAGE_ENV1 && drum_track(a)))) return 0;
     if ((pg == K_PAGE_SOUND || pg == K_PAGE_EDIT) && en->uid == K_UID('K', 'V', 'E', 'C'))
         return 0; /* both VECTOR pages share the larger, labelled host XY preview */
-    if (pg == K_PAGE_SOUND && en->uid == K_UID('K', 'O', 'G', 'N') && !mx)
+    if (pg == K_PAGE_SOUND && en->uid == K_UID('K', 'O', 'G', 'N') && !mx && !grid)
         return 0; /* ORGAN's SOUND: its bars and switches (synth_view_korgan_wide) */
-    if ((pg == K_PAGE_SOUND || pg == K_PAGE_EDIT) && !mx && sk_geom()) {   /* the built-in engines: the FM-1's own views, laid to this screen */
+    if ((pg == K_PAGE_SOUND || pg == K_PAGE_EDIT) && !mx && !grid && sk_geom()) {   /* the built-in engines: the FM-1's own views, laid to this screen */
         static const uint32_t OWN[7] = {K_UID('K', 'A', 'N', 'L'), K_UID('K', 'L', 'O', 'F'), K_UID('K', 'T', 'R', 'I'), K_UID('K', 'P', 'H', 'S'),
                                         K_UID('K', 'O', 'G', 'N'), K_UID('K', 'F', 'M', '2'), K_UID('D', 'R', 'U', 'M')};
         for (k = 0; k < 7; k++) if (en->uid == OWN[k]) return 0;
@@ -536,7 +556,7 @@ int wide_panel_view(KApp *a)
                 if (!strcmp(l, "CUT")) kc = q; else if (!strcmp(l, "RES")) kr = q; else if (!strcmp(l, "TYPE") || !strcmp(l, "MODE")) kt = q;
             }
             pk = kt >= 0 && kc >= 0 && kr >= 0;
-        } else if (!mx && pg == K_PAGE_SOUND)
+        } else if (!mx && pg == K_PAGE_SOUND && !grid)
             pk = uid == K_UID('K', 'F', 'M', '2') ? 2 : uid == K_UID('K', 'P', 'H', 'S') ? 3 : uid == K_UID('K', 'L', 'O', 'F') ? 4 :
                  uid == K_UID('K', 'A', 'N', 'L') || uid == K_UID('K', 'T', 'R', 'I') ? 6 : 0;
         else if (pg == K_PAGE_LFO && !drum_track(a)) pk = 5;
@@ -544,7 +564,9 @@ int wide_panel_view(KApp *a)
             const int rh2 = whole.h - 39 < 2 * pitch - 8 ? whole.h - 39 : 2 * pitch - 8, pw = pk == 4 ? 88 : 116, ph = 74, px = wx + 10, py = wy + 31 + (rh2 - ph) / 2;   /* (wide, not
                                                  * tall: a wave reads across; in the middle of the two rows) */
             const KVal *P = a->params[t][K_PAGE_SOUND] + 4;
-            if (pk == 1) sw_filter(en, P, kt, kc, kr, px, py, pw, ph);
+            if (pk == 1 && grid && rows <= 2) sw_filter(en, P, kt, kc, kr, wx + 10, wy + 29, whole.w - 20, 33);   /* (the Zero: across the top) */
+            else if (pk == 1 && grid) {}
+            else if (pk == 1) sw_filter(en, P, kt, kc, kr, px, py, pw, ph);
             else if (pk == 7) {   /* (under the kit's one row of knobs, the whole width: four lanes a line) */
                 const KRect r = sw_screen(wx + 10, wy + 86, whole.w - 20, whole.h - 92 < 44 ? whole.h - 92 : 44, 0, 0);
                 for (q = 0; q < K_LANES; q++) {
@@ -569,6 +591,22 @@ int wide_panel_view(KApp *a)
                 else sw_wave(sw_screen(px, py, pw, ph, pk == 2 ? "OUT" : "CHIP", 0), pk == 2 ? sw_fm_out : sw_lofi_wave, a);
             }
         }
+    }
+    if (grid) {   /* (the filter, where EDIT has one and two rows hold its knobs, is across the top: the cells under it) */
+        const int cw = (whole.w - 20) / 4, top = pk == 1 && rows <= 2 ? 37 : 0, rr0 = top ? 0 : r0, gp = 36;
+        const int two = en->uid == K_UID('K', 'A', 'N', 'L');   /* (trying on RETRO first: the knob beside its label and value) */
+        sk_cw = cw; sk_kr = two ? 9 : 7; sk_gap = 0; sk_side = two ? 2 : 1;
+        for (k = 0; k < (top ? 2 : vis) && rr0 + k < rows; k++) {
+            const int r = rr0 + k, ly = wy + 29 + top + k * gp, ky = two ? ly + 16 : ly + 14 + sk_kr + 3;
+            if (k || top) g_fill(&cv, wx + 10, ly - 3, whole.w - 20, 1, SK_OUT);
+            for (c = 0; c < 4; c++) {
+                const int i = r * 4 + c;
+                if (i >= n) break;
+                sk_control(a, pg, i, wx + 10 + c * cw + cw / 2, ly, ky, grid_word(ui_item_name(a, pg, i)), 1);
+            }
+        }
+        sk_cw = 56; sk_kr = 10; sk_gap = 1; sk_side = 0;
+        return 1;
     }
     if (pk == 7) pk = 0;   /* (the kit's: the knobs as they were) */
     sk_cw = pk ? 42 : 62; sk_kr = cv.h < 180 ? 7 : 8; sk_gap = cv.h < 180 ? 3 : 4;

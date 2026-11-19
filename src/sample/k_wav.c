@@ -147,6 +147,37 @@ void k_wav_free(KWav *w)
     memset(w, 0, sizeof *w);
 }
 
+static void wr16(uint8_t *p, unsigned v) { p[0] = (uint8_t)(v & 255u); p[1] = (uint8_t)((v >> 8) & 255u); }
+static void wr32(uint8_t *p, uint32_t v) { wr16(p, v & 0xFFFFu); wr16(p + 2, v >> 16); }
+
+int k_wav_write(const char *path, const int16_t *frames, uint32_t nframes, int channels, uint32_t rate)
+{
+    uint8_t h[44], b[4096];
+    const uint32_t bytes = nframes * (uint32_t)channels * 2u;
+    uint32_t i, n = 0;
+    FILE *f;
+    if (!path || (channels != 1 && channels != 2) || (nframes && !frames) || nframes > 0x3FFFFFF0u / 4u) return K_WAV_ERR_IO;
+    memcpy(h, "RIFF", 4); wr32(h + 4, 36u + bytes); memcpy(h + 8, "WAVE", 4);
+    memcpy(h + 12, "fmt ", 4); wr32(h + 16, 16); wr16(h + 20, FMT_PCM); wr16(h + 22, (unsigned)channels);
+    wr32(h + 24, rate); wr32(h + 28, rate * (uint32_t)channels * 2u); wr16(h + 32, (unsigned)channels * 2u); wr16(h + 34, 16);
+    memcpy(h + 36, "data", 4); wr32(h + 40, bytes);
+    f = fopen(path, "wb");
+    if (!f) return K_WAV_ERR_IO;
+    if (fwrite(h, 1, sizeof h, f) != sizeof h) goto fail;
+    for (i = 0; i < nframes * (uint32_t)channels; i++) {   /* little-endian whatever the machine is */
+        wr16(b + n, (unsigned)(uint16_t)frames[i]);
+        n += 2;
+        if (n == sizeof b) { if (fwrite(b, 1, n, f) != n) goto fail; n = 0; }
+    }
+    if (n && fwrite(b, 1, n, f) != n) goto fail;
+    if (fclose(f) != 0) { remove(path); return K_WAV_ERR_IO; }
+    return K_WAV_OK;
+fail:
+    fclose(f);
+    remove(path);
+    return K_WAV_ERR_IO;
+}
+
 const char *k_wav_error(int err)
 {
     switch (err) {

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Build a portable KRSG song file from the editable COLDWIRE score.
+"""Build a portable KRSG song file from an editable score: the demo, MURIYA (examples/muriya.json), by default; COLDWIRE
+(examples/coldwire.json) is the older one, kept as an example.
 
 Keep this independent of the synthesizer UI. It uses the version-1 KRSG
 chunk layout in src/kreisel_song.c; --check detects stale generated files.
@@ -98,6 +99,13 @@ def make_song(score):
             for j, value in enumerate(track.get(key, [])):
                 assert j < 4 and 0 <= value <= 100
                 prms.extend([page, j, value + 128])
+        # the inserts (FX: [type, three values, type, three values]; types as src/kreisel_fx.c's names, 1-based, 0 none; values
+        # 0 .. 100), the LFO (RATE WAVE PHS FADE, then where it goes: PIT FLT SHP AMP, -64 .. 63) and the arp (MODE RATE OCT GATE)
+        for page, key, n in ((2, "fx", 8), (8, "lfo", 8), (9, "arp", 4)):
+            for j, value in enumerate(track.get(key, [])):
+                assert j < n and -128 <= value <= 127
+                if value is not None:
+                    prms.extend([page, j, value + 128])
         parts.append(chunk("PRMS", prms))
 
     payload = b"".join(parts)
@@ -109,26 +117,28 @@ def make_song(score):
     return data
 
 
-def c_source(data):
-    """src/kreisel_demo.c: the song in the firmware, loaded at start while developing"""
+def c_source(data, name, score):
+    """src/kreisel_demo.c: the song in the firmware, loaded at start (kreisel_demo.h)"""
     rows = ["    " + ", ".join(f"0x{b:02X}" for b in data[i:i + 16]) + "," for i in range(0, len(data), 16)]
     return ("/* SPDX-License-Identifier: MPL-2.0\n * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), H\u00fcgelton Instruments */\n"
-            "/* COLDWIRE, the demo song (examples/coldwire.json): written by tools/make_demo_song.py, do not edit. Loaded at start while\n"
-            " * KREISEL_DEMO_SONG is 1 (the default during development: kreisel_demo.h) */\n"
+            f"/* {name}, the demo song ({score.as_posix()}): written by tools/make_demo_song.py, do not edit. Loaded at start as\n"
+            " * KREISEL_DEMO_SONG says (kreisel_demo.h) */\n"
             "#include \"kreisel_demo.h\"\n#include \"kreisel_song.h\"\n\n"
-            f"static const unsigned char COLDWIRE[{len(data)}] = {{\n" + "\n".join(rows) + "\n};\n\n"
-            "int k_demo_load(KApp *a) { return k_song_load(a, COLDWIRE, sizeof COLDWIRE) == K_SONG_OK ? 0 : -1; }\n")
+            f"static const unsigned char DEMO[{len(data)}] = {{\n" + "\n".join(rows) + "\n};\n\n"
+            "const char *const k_demo_name = \"" + name + "\";\n\n"
+            "int k_demo_load(KApp *a) { return k_song_load(a, DEMO, sizeof DEMO) == K_SONG_OK ? 0 : -1; }\n")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("score", nargs="?", type=Path, default=Path("examples/coldwire.json"))
-    parser.add_argument("output", nargs="?", type=Path, default=Path("examples/coldwire.krs"))
+    parser.add_argument("score", nargs="?", type=Path, default=Path("examples/muriya.json"))
+    parser.add_argument("output", nargs="?", type=Path, default=Path("examples/muriya.krs"))
     parser.add_argument("--c", type=Path, default=Path("src/kreisel_demo.c"), help="the C copy the apps load at start")
     parser.add_argument("--check", action="store_true", help="verify the committed KRSG (and its C copy) against the score")
     args = parser.parse_args()
-    data = make_song(json.loads(args.score.read_text(encoding="utf-8")))
-    src = c_source(data).encode("utf-8")
+    score = json.loads(args.score.read_text(encoding="utf-8"))
+    data = make_song(score)
+    src = c_source(data, score["name"], args.score).encode("utf-8")
     if args.check:
         if not args.output.is_file() or args.output.read_bytes() != data:
             parser.error("song file does not match the score: regenerate it")

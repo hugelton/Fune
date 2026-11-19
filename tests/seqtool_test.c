@@ -219,11 +219,13 @@ int main(void) {
         assert(g.track == 1 && g.focus[g.focused].kind == K_NODE_SCENE && g.focus[g.focused].index == 1 * K_SCENES + 3);
     }
     {   /* SEQ held + SELECT (the FM-1's way in): from HOME onto the SEQ page with the tools open, its release then
-         * does nothing; HOME closes. Held alone: nothing */
+         * does nothing; HOME closes. Held alone a while: the same, with no SELECT */
         KApp c; k_init(&c); k_open_page(&c, K_PAGE_HOME);
         k_dispatch(&c, (KAction){K_ACT_PAGE_GROUP_DOWN, K_GROUP_PATTERN, 0, 100});
-        k_tick(&c, 900); assert(!c.tools_open && !c.menu_open && c.page == K_PAGE_HOME);
-        k_dispatch(&c, (KAction){K_ACT_SELECT_DELTA, 1, 0, 950}); assert(c.tools_open && c.page == K_PAGE_ROLL && !c.menu_open);
+        k_tick(&c, 400); assert(!c.tools_open && !c.menu_open && c.page == K_PAGE_HOME);
+        k_tick(&c, 900); assert(c.tools_open && !c.menu_open && c.page == K_PAGE_ROLL);
+        { const int r = c.tools_sel; k_dispatch(&c, (KAction){K_ACT_SELECT_DELTA, 1, 0, 950});
+          assert(c.tools_open && c.page == K_PAGE_ROLL && !c.menu_open && c.tools_sel == (r + 1) % k_tools_count(&c)); }
         k_dispatch(&c, (KAction){K_ACT_PAGE_GROUP_UP, K_GROUP_PATTERN, 0, 500}); assert(c.tools_open && c.page == K_PAGE_ROLL);
         k_dispatch(&c, (KAction){K_ACT_HOME_DOWN, 0, 0, 600}); k_dispatch(&c, (KAction){K_ACT_HOME_UP, 0, 0, 650});
         assert(!c.tools_open && c.page == K_PAGE_ROLL);

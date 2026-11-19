@@ -105,6 +105,15 @@ int main(void)
         assert(!strcmp(k_setting_value(&a, K_SET_MIDI_CH), "2") && !strcmp(k_setting_tab_name(k_setting_tab(K_SET_MIDI_IN)), "Connect"));
         a.clock_src = 0; assert(!strcmp(k_setting_value(&a, K_SET_MIDI_CLOCK), "Internal"));
     }
+    {   /* Ableton Link's row: only in a build with it (link_peers >= 0), on the Connect tab; on with others: how many */
+        k_init(&a); k_set_layout(&a, K_LAY_CONNECT);
+        assert(a.link_peers == -1 && !k_setting_visible(&a, K_SET_LINK) && k_setting_tab(K_SET_LINK) == k_setting_tab(K_SET_MIDI_IN));
+        a.link_peers = 0; assert(k_setting_visible(&a, K_SET_LINK) && !strcmp(k_setting_value(&a, K_SET_LINK), "Off"));
+        a.set_v[K_SET_LINK] = 1; assert(!strcmp(k_setting_value(&a, K_SET_LINK), "On"));
+        a.link_peers = 1; assert(!strcmp(k_setting_value(&a, K_SET_LINK), "1 peer"));
+        a.link_peers = 3; assert(!strcmp(k_setting_value(&a, K_SET_LINK), "3 peers"));
+        k_set_layout(&a, 0); assert(!k_setting_visible(&a, K_SET_LINK));
+    }
 #endif
     {   /* MIDI out: nothing without a sender; a note on, its off on the track's channel */
         k_io_note_out(0, 60, 100); assert(nsent == 0);

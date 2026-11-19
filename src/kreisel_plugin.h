@@ -83,6 +83,9 @@ int k_plugin_lane_note(int index, int lane);      /* the note a synth that is a 
 int k_plugin_lane_params(int index);                         /* the engines a track can have: the built-in ones, then the registered */
 const KPlugin *k_plugin_at(int index);            /* the plugin at an index; out of range: the first (never 0) */
 int k_plugin_register(const KPlugin *plugin);     /* checks it and adds it; its index, or a K_PLUG_E_* */
+#if K_WITH_SAMPLES
+int k_plugin_register_host(const KPlugin *plugin);   /* the host's own engine of some builds only (the Sampler): Hügelton's id */
+#endif
 /* Effect ids: 0 = NONE, 1..15 built-ins (1..4 remain legacy DIST/CHO/DLY/REV),
  * then installed effects; kept separate from the synth engine registry. */
 int k_effect_count(void);

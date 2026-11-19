@@ -15,7 +15,7 @@
     "audio_out =         # a device's name (kreisel --audio-devices lists them); empty: the system's own\n" \
     "audio_rate = 0      # Hz (48000, 44100); 0: the device's own\n" \
     "audio_buffer = 512  # frames, a power of two (256 .. 2048: lower is quicker, higher is safer)\n" \
-    "audio_in =          # a capture device's name, for recording later; empty: none\n"
+    "audio_in =          # the input the Sampler records from (a capture device's name); empty: the system's, none: no input\n"
 
 static const char DEFAULT_CONF[] =
     "# Fune: inputs. Edited by hand, or by the settings' Connect tab (it rewrites the values only).\n"

@@ -9,15 +9,41 @@ mkdir -p "$DATA"
 if [ -d "$HERE/plugins" ]; then mkdir -p "$DATA/plugins" && cp -u "$HERE/plugins/"*.so "$DATA/plugins/" 2>/dev/null; fi
 LOG="$DATA/log.txt"
 : >"$LOG" 2>/dev/null || LOG=/dev/null
-# The Zero's desktop is labwc (Wayland), which holds the display: SDL goes through Wayland when its socket is there, else
-# KMSDRM (a console without the desktop). (As M5Stack's SDL2 examples, CardputerZero-AppBuilder.)
-if [ -z "${XDG_RUNTIME_DIR:-}" ] && [ -d "/run/user/$(id -u)" ]; then XDG_RUNTIME_DIR="/run/user/$(id -u)"; export XDG_RUNTIME_DIR; fi
-if [ -z "${SDL_VIDEODRIVER:-}" ]; then
-  if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
-    for c in wayland-0 wayland-1; do [ -S "$XDG_RUNTIME_DIR/$c" ] && { WAYLAND_DISPLAY=$c; export WAYLAND_DISPLAY; break; }; done
-  fi
-  if [ -n "${WAYLAND_DISPLAY:-}" ]; then SDL_VIDEODRIVER=wayland; elif [ -e /dev/dri/card0 ]; then SDL_VIDEODRIVER=kmsdrm; fi
-  [ -n "${SDL_VIDEODRIVER:-}" ] && export SDL_VIDEODRIVER
+# Sound: the Zero's speaker (ES8389). Its user session runs PipeWire, which holds the card: with PipeWire's socket there SDL
+# is left to its own choice (it goes through PipeWire to the default sink, the speaker). Without PipeWire: the ES8389 card
+# straight through ALSA (not HDMI's card 0, which ALSA's default would take; the Zero has no /etc/asound.conf). plughw converts
+# the rate and format. AUDIODEV or SDL_AUDIODRIVER set already win. (Tried on the device 2026-11-15.)
+RUN="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -z "${AUDIODEV:-}" ] && [ -z "${SDL_AUDIODRIVER:-}" ] && [ -S "$RUN/pipewire-0" ]; then
+  [ -n "${XDG_RUNTIME_DIR:-}" ] || { XDG_RUNTIME_DIR="$RUN"; export XDG_RUNTIME_DIR; }
+elif [ -z "${AUDIODEV:-}" ]; then
+  for c in /proc/asound/card[0-9]*; do
+    [ -r "$c/id" ] || continue
+    case "$(cat "$c/id" 2>/dev/null) $(cat "$c/../cards" 2>/dev/null | grep -m1 "^ *${c##*card} ")" in
+      *ES8389*|*es8389*|*ardputer*) AUDIODEV="plughw:${c##*card},0"; export AUDIODEV; SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"; export SDL_AUDIODRIVER; break ;;
+    esac
+  done
 fi
-echo "fune: video ${SDL_VIDEODRIVER:-(SDL's choice)}, data $DATA" >>"$LOG"
-exec "$HERE/bin/kreisel" --profile zero --fullscreen "$@" >>"$LOG" 2>&1
+echo "fune: audio ${AUDIODEV:-(chosen by SDL)}${SDL_AUDIODRIVER:+ via $SDL_AUDIODRIVER}" >>"$LOG"
+# The screen: the Zero's LCD is /dev/fb0 (320x170, RGB565), which its launcher draws to itself; labwc's output is a headless
+# one that never reaches the LCD, and SDL's Wayland and KMSDRM there want EGL, which crashes without a GPU (tried on the
+# device 2026-11-15). So Fune writes to /dev/fb0 itself and reads the keyboard's evdev (platforms/sdl/fbdev.c).
+# FUNE_VIDEO=sdl: SDL's own window instead (Wayland when its socket answers, else KMSDRM), for a Zero with a display server.
+KEYS=/dev/input/by-path/platform-3f804000.i2c-event
+[ -e "$KEYS" ] || KEYS=""
+if [ "${FUNE_VIDEO:-fb}" = fb ] && [ -w "${FUNE_FB:-/dev/fb0}" ]; then
+  set -- --fb "${FUNE_FB:-/dev/fb0}" ${KEYS:+--keys "$KEYS"} "$@"
+  echo "fune: video ${FUNE_FB:-/dev/fb0}, keys ${KEYS:-(the first keyboard)}, data $DATA" >>"$LOG"
+else
+  if [ -z "${XDG_RUNTIME_DIR:-}" ] && [ -d "/run/user/$(id -u)" ]; then XDG_RUNTIME_DIR="/run/user/$(id -u)"; export XDG_RUNTIME_DIR; fi
+  if [ -z "${SDL_VIDEODRIVER:-}" ]; then
+    if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then   # (the newest socket: an old one may be left with no one behind it)
+      for c in $(ls -t "$XDG_RUNTIME_DIR" 2>/dev/null | grep '^wayland-[0-9]*$'); do [ -S "$XDG_RUNTIME_DIR/$c" ] && { WAYLAND_DISPLAY=$c; export WAYLAND_DISPLAY; break; }; done
+    fi
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then SDL_VIDEODRIVER=wayland; elif [ -e /dev/dri/card0 ]; then SDL_VIDEODRIVER=kmsdrm; fi
+    [ -n "${SDL_VIDEODRIVER:-}" ] && export SDL_VIDEODRIVER
+  fi
+  set -- --fullscreen "$@"
+  echo "fune: video ${SDL_VIDEODRIVER:-(chosen by SDL)}, data $DATA" >>"$LOG"
+fi
+exec "$HERE/bin/kreisel" --profile zero "$@" >>"$LOG" 2>&1

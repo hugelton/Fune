@@ -275,6 +275,16 @@ void wide_head(KApp *a, KPage pg, int row, int mx, const KEngine *en, int t);
 int switch_synth_view(KApp *a);
 int synth_view_korgan_wide(KApp *a);
 int wide_panel_view(KApp *a);
+#if K_WITH_SAMPLES && !defined(KREISEL_BITMAP_FONT)
+/* draw_sampler.c (Linux and macOS) */
+int sampler_view(KApp *a);
+extern int sampler_live;
+extern KRect sampler_rec_btn;   /* the bar's Rec (a pointer, a finger): w 0 when not drawn */
+#define SAMPLER_ROWS 16
+extern KRect sampler_file_btn;   /* the bar's file name: a click opens the files (w 0 when not drawn) */
+extern KRect sampler_rows[SAMPLER_ROWS];   /* the file browser's rows drawn, and the file each is */
+extern int sampler_row_at[SAMPLER_ROWS], sampler_rows_n;
+#endif
 /* draw_engines.c */
 int synth_view_korgan(KApp *a);
 int edit_view_korgan(KApp *a);

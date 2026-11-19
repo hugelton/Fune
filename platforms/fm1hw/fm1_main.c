@@ -805,6 +805,17 @@ static int group_of_page(KPage p)
 #define FM1_LED_FADE 0              /* 1: the LEDs fade down (the buttons ~0.13 s, the keys ~60 ms); 0: off at once */
 #endif
 #define LV_FULL 64u
+/* PLAY with the tempo: while playing, a flash on each beat (LV_BEAT_MS), between them a quarter. PLAY's green
+ * LED (no key under it: fm1_led_extra) flashes instead when FM1_PLAY_GREEN gives its place, column << 3 | row bit (find it with
+ * the console's `ledx`), and the PLAY LED stays lit. -1: none (the PLAY LED flashes) */
+#if !defined(FM1_PLAY_GREEN) && defined(FM1_BOARD_SMK37)
+#define FM1_PLAY_GREEN (-1)           /* (the SMK-37's board has no LED places without keys: its PLAY LED flashes) */
+#endif
+#ifndef FM1_PLAY_GREEN
+#define FM1_PLAY_GREEN (8 << 3 | 1)   /* column 8, row bit 1 (PA9): Felucca's ui_input.c, seen lit on the hardware 2026-11-15 */
+#endif
+#define LV_BEAT_MS 90u
+static int16_t led_probe = -1;              /* the console's `ledx`: a place lit, column << 3 | row bit (-1 none) */
 #define LV_IDLE_MS 20000u
 #define LV_FLOOR 4u                         /* of 64: below it (~5 %) an LED is off, not a flickering trickle of PWM */
 #define LV_BREATH_MS 4096u                  /* a breath (a power of 2) */
@@ -857,6 +868,28 @@ static void leds_update(uint32_t now)
         if ((g >= 0 && group_of_page(app.page) == g) || (i == MB_PLAY && app.playing) || (i == MB_REC && app.recording) ||
             (i == MB_HOME && (app.page == K_PAGE_HOME || app.page == K_PAGE_MIXER)) || (btn_down & (1u << i)))
             aim[i] = LV_FULL;
+    }
+    {   /* the beat: PLAY (or its green LED) flashes as each one starts */
+        static int beat_last = -1;
+        static uint32_t beat_t;
+        uint8_t extra[FM1_NCOL] = {0};
+        int flash = 0;
+        if (app.playing && app.beat >= 0) {
+            if (app.beat != beat_last) beat_t = now;
+            flash = now - beat_t < LV_BEAT_MS;
+        }
+        beat_last = app.playing ? app.beat : -1;
+#if FM1_PLAY_GREEN >= 0
+        if (flash) extra[FM1_PLAY_GREEN >> 3] |= (uint8_t)(1u << (FM1_PLAY_GREEN & 7));
+#else
+        if (app.playing && !(btn_down & (1u << MB_PLAY))) aim[MB_PLAY] = flash ? LV_FULL : LV_FULL / 4u;
+#endif
+        if (led_probe >= 0) extra[led_probe >> 3] |= (uint8_t)(1u << (led_probe & 7));
+#ifndef FM1_BOARD_SMK37
+        for (i = 0; i < FM1_NCOL; i++) fm1_led_extra[i] = leds >= 2u ? 0u : extra[i];
+#else
+        (void)extra;
+#endif
     }
     if (app.octave < 0) aim[MB_OCTDN] = (uint8_t)(app.octave <= -2 ? LV_FULL : LV_FULL / 3u);
     if (app.octave > 0) aim[MB_OCTUP] = (uint8_t)(app.octave >= 2 ? LV_FULL : LV_FULL / 3u);
@@ -1294,19 +1327,24 @@ void fm1_cstart(void)
     fm1_time_init();
     fm1_reset_reason();                         /* before the watchdog is armed: why this boot began */
     fm1_wdt_arm(0x0D);
-    if (guard.magic != 0x4B525331u || (fm1_boot.p3_rst & 1u)) {   /* "KRS1"; a power-on (p3_rst bit 0) is no failed boot:
-                                                 * the RAM may keep the magic over a short power-off with its counts stale
-                                                 * (2026-11-05: SAFE reason 2 on battery after unplugging USB). A crash loop
+    {   /* kdiag first: a cold start, another layout, or RAM another firmware used since (2026-11-15: after official V16 and
+         * Felucca were installed and Fune put back, it came up in SAFE, reason 2 with prev stage 0: kdiag was not ours, yet the
+         * boot counts beside it were still read as ours). Then the counts are not ours either */
+        const int fresh = kdiag.magic != KDIAG_MAGIC;
+        if (fresh) {                            /* all of it zero, then used */
+            uint32_t q, *z = (uint32_t *)&kdiag;
+            for (q = 0; q < sizeof kdiag / 4u; q++)
+                z[q] = 0;
+            kdiag.magic = KDIAG_MAGIC;
+        }
+        if (fresh || guard.magic != 0x4B525331u || (fm1_boot.p3_rst & 1u)) {   /* "KRS1"; a power-on (p3_rst bit 0) is no
+                                                 * failed boot: the RAM may keep the magic over a short power-off with its counts
+                                                 * stale (2026-11-05: SAFE reason 2 on battery after unplugging USB). A crash loop
                                                  * resets by the watchdog or in software, and is still counted. */
-        guard.magic = 0x4B525331u;
-        guard.failed = 0;
-        guard.pending = 0;
-    }
-    if (kdiag.magic != KDIAG_MAGIC) {           /* a cold start or another layout: all of it zero, then used */
-        uint32_t q, *z = (uint32_t *)&kdiag;
-        for (q = 0; q < sizeof kdiag / 4u; q++)
-            z[q] = 0;
-        kdiag.magic = KDIAG_MAGIC;
+            guard.magic = 0x4B525331u;
+            guard.failed = 0;
+            guard.pending = 0;
+        }
     }
     if (guard.pending)
         guard.failed++;

@@ -129,6 +129,29 @@ void sk_control(KApp *a, KPage pg, int i, int cx, int ly, int ky, const char *la
     ui_item_value(a, pg, i, val, sizeof val, &unit);
     snprintf(vu, sizeof vu, "%s%s", val, d && d->fmt == KF_ENUM ? "" : unit);
     if (d && d->fmt == KF_ENUM && strlen(vu) > 2 && !strchr(vu, '&') && !strchr(vu, '%')) { int k2; for (k2 = 1; vu[k2]; k2++) if (vu[k2] >= 'A' && vu[k2] <= 'Z') vu[k2] = (char)(vu[k2] + 32); }   /* "Tri", "Notch"; LP stays */
+    if (sk_side == 2) {   /* (the Zero's grid) the knob at the left of the cell, its label and its value one over the
+                           * other at its right, close, the knob level with the middle of the two */
+        const int x0 = cx - sk_cw / 2, kx = x0 + 8 + sk_kr, tx = kx + sk_kr + 6, tw = cx + sk_cw / 2 - tx, th = g_text_h(GF_S);
+        const int ly2 = ky - th + 1, vy = ky - 1;
+        if (sk_in_row(a, ti) && label && label[0]) {
+            const int lw = g_text_w(GF_S, label);
+            sk_pill(tx - 2, ly2, lw + 4 < tw + 2 ? lw + 4 : tw + 2, lw, tw, label);
+            g_text_box(&cv, tx, ly2 - 1, tw, 15, GF_S, label, sk_row_text(), -1);
+        } else g_text_box(&cv, tx, ly2 - 1, tw, 15, GF_S, label, lab, -1);
+        if (d && d->fmt == KF_ONOFF) {   /* a switch: its pill where the knob would be, standing up */
+            const int on = k_switch_on(d, v);
+            g_rrect(&cv, kx - 6, ky - 10, 12, 20, 6, on ? (lit ? SK_ARC : k_mix(SK_PANEL, SK_ARC, 40)) : k_mix(SK_PANEL, 0x000000, 45));
+            g_rrect(&cv, kx - 5, on ? ky - 9 : ky + 1, 10, 8, 4, lit ? SK_INK : k_mix(SK_PANEL, SK_INK, 52));
+            g_text_box(&cv, tx, vy, tw, 15, GF_S, k_switch_name(d, v), ink, -1);
+        } else {
+            if (d) { pct = sk_pct(d, v); bip = (d->min < 0 && d->max > 0) || d->fmt == KF_LINK_FENV; }
+            else { pct = v < 0 ? 0 : v > 100 ? 100 : v; bip = 0; }
+            sk_knob(kx, ky, pct, bip, lit, hot);
+            g_text_box(&cv, tx, vy, tw, 15, GF_S, vu, ink, -1);
+        }
+        k_set_bounds(a, K_NODE_PARAM, ti, (KRect){x0, ly2 - 2, sk_cw, vy + 15 - (ly2 - 2)});
+        return;
+    }
     if (d && d->fmt == KF_ONOFF) {   /* a switch: a pill, its knob right and lit when on */
         int on = k_switch_on(d, v);
         sk_label(a, ti, cx - sk_cw / 2, ly, sk_cw, label, lab);

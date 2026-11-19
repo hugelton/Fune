@@ -3,6 +3,9 @@
 /* Input: a tap, a touch's drag, a mouse's wheel and hover, the popup (a right click's menu, a list to pick from) and a
  * pad's (and a desktop's keys') walk over the page's targets. */
 #include "draw_int.h"
+#if K_WITH_SAMPLES && !defined(KREISEL_BITMAP_FONT)
+#include "sample/k_browse.h"
+#endif
 
 /* a tap (touch, a mouse click) at x, y of the screen, as every platform sends it: on the overlays their rows, tabs and actions;
  * on a page the header's page name (the page menu) or a focus target */
@@ -509,6 +512,18 @@ void ui_touch(KApp *a, int phase, int x, int y, uint32_t ms)
         return;
     }
     if (roll_touch(a, phase, x, y, ms)) { touch_hides_cursor(a, ms); return; }
+#if K_WITH_SAMPLES && !defined(KREISEL_BITMAP_FONT)
+    if (phase == 0 && a->page == K_PAGE_SOUND && sampler_rec_btn.w && inside(sampler_rec_btn, x, y)) { k_dispatch(a, (KAction){K_ACT_REC, 0, 0, ms}); return; }   /* (the Sampler's Rec) */
+    if (phase == 0 && a->page == K_PAGE_SOUND && sampler_file_btn.w && inside(sampler_file_btn, x, y)) { k_dispatch(a, (KAction){K_ACT_TOOLS, 0, 0, ms}); return; }   /* (its file: the browser) */
+    if (phase == 0 && a->page == K_PAGE_SOUND && sampler_rows_n) {   /* the browser's rows: one taken (the track plays it); the one in hand again: kept */
+        int i;
+        for (i = 0; i < sampler_rows_n; i++) if (inside(sampler_rows[i], x, y)) {
+            if (sampler_row_at[i] == k_browse_sel()) k_dispatch(a, (KAction){K_ACT_ACCEPT, 0, 0, ms});
+            else k_browse_pick(sampler_row_at[i]);
+            return;
+        }
+    }
+#endif
     if (a->name_open) {   /* NAME: a letter touched takes the cursor; up or down along it, the letter changes (8 px a letter); the
                            * one in hand touched and let go unmoved, the next letter; Cancel and Save as a tap */
         int i;

@@ -1,4 +1,17 @@
-# COLDWIRE — original electro demo for Kreisel
+# Demo songs
+
+- **MURIYA** (`muriya.json`, `muriya.krs`): the demo song in the firmware and the desktop builds (`src/kreisel_demo.c`). The owner's MIDI sketch (`midi/Muriya.mid`, six parts) arranged for four tracks by `tools/midi_to_score.py`: Retro synth bass, Phase pad, Digital piano, Trio lead; 98 BPM, 96 scenes.
+- **COLDWIRE** (`coldwire.json`, `coldwire.krs`): the earlier demo, below.
+
+To rebuild MURIYA from the MIDI file (needs `mido`), then the song and its C copy:
+
+```sh
+python3 tools/midi_to_score.py
+python3 tools/make_demo_song.py
+python3 tools/make_demo_song.py --check
+```
+
+## COLDWIRE — original electro demo for Kreisel
 
 A small original four-track sketch drawing on early-1980s electro and sequenced synthesizer music. **No melody or recording is copied from Cybotron or Kraftwerk.**
 
@@ -12,7 +25,7 @@ The four tracks peak within 2 dB of each other (about -13 dB each, -7 dB togethe
 
 Patterns A–D contain variations for the synth tracks. The eight SONG rows suggest an arrangement, but **the current audio transport only loops each track's currently selected pattern**; it does not automatically advance SONG scenes. Change patterns manually to hear the variations. DRUM lanes currently have a single step mask shared across patterns.
 
-## Load on the desktop SDL build
+### Load on the desktop SDL build
 
 The file is already in Kreisel's KRSG format. With Kreisel closed, **back up an existing slot before replacing it**:
 
@@ -29,11 +42,10 @@ Launch Kreisel normally, then select SONG slot 6 in SAVE > LOAD (or let RESTORE 
 
 That loads it and keeps it in song slot 1 (any of 1..6).
 
-To edit the score, change `examples/coldwire.json` (a track's `level`, `pan`, `send1` / `send2` to the buses, `env1` / `env2`, its `params` and `patterns`, or a drum track's `lanes`; the song's `bus1` / `bus2` settings, `null` for a default), then from the repository root run:
+To edit the score, change `examples/coldwire.json` (a track's `level`, `pan`, `send1` / `send2` to the buses, `env1` / `env2`, its `params` and `patterns`, or a drum track's `lanes`; the song's `bus1` / `bus2` settings, `null` for a default), then from the repository root run (the C copy goes elsewhere, so the firmware keeps MURIYA):
 
 ```sh
-python3 tools/make_demo_song.py
-python3 tools/make_demo_song.py --check
+python3 tools/make_demo_song.py examples/coldwire.json examples/coldwire.krs --c /tmp/coldwire.c
 ```
 
 The generator has no dependencies beyond Python's standard library. The checked-in binary is playable directly and the JSON is the editable source.

@@ -136,6 +136,11 @@ void k_audio_sync(KAudio *audio, const KApp *app);
 /* n external MIDI clocks (k_clock_take) under the same lock as k_audio_sync, called after it. Every 6 the sequencer steps (at the
  * next render); ignored unless the app's clock is external. */
 void k_audio_clock_tick(KAudio *audio, uint32_t n);
+/* Ableton Link (a platform that has it, from its audio callback before the render): the session's place at the block's first
+ * sample, pos_q16 in 16ths (Q16, the bar's 0 .. K_STEPS), and a 16th's length in frames (Q16) at the session's tempo. The next
+ * step is moved to its place in the bar (a step started from STOP waits for its own); nothing while stopped or following MIDI
+ * clock. The steps between keep the sample clock, at the app's whole BPM. */
+void k_audio_phase_lock(KAudio *audio, int64_t pos_q16, int64_t frames16_q16);
 /* the sequencer's next MIDI message out (its notes on the track's channel, a drum lane's as General MIDI's; the clock, 24 a
  * quarter, with Start and Stop, while it runs on its own tempo, not an external clock), from the main loop: its length (1 for
  * the clock's), 0 none (kreisel_io.c's k_io_send_audio sends them all) */
@@ -170,4 +175,11 @@ int k_audio_voice_cap_now(void);
 /* the arp's last note on track t (its pitch, -1: no arp) and how many notes it has played: the platform hands them to the screen
  * (k_arp_note) */
 int k_audio_arp_last(const KAudio *a, int t, uint32_t *count);
+#if K_WITH_SAMPLES   /* the Sampler (Linux and macOS: never the FM-1's build) */
+#include "kreisel_plugin.h"
+extern const KPlugin K_SAMPLER_PLUGIN;          /* registered by the platform at start (k_plugin_register_host) */
+#define K_SAMPLER_UID K_UID('K', 'S', 'M', 'P')
+/* where track t's sounding voices are in its sample (frames), for the UI's playheads (read without the lock: a picture only) */
+int k_audio_sampler_heads(int t, uint32_t *at, int max);
+#endif
 #endif

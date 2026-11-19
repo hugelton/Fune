@@ -6,6 +6,7 @@ them upstream, or write the change down in the commit that updates the copy).
 | Directory | What | Licence | From |
 | --- | --- | --- | --- |
 | `pendel-dsp/` | The insert effects (oscillator, SVF, delay, the fifteen DSPs) from Pendel, the author's own. | MPL-2.0 (relicensed for Kreisel, 2026-11-07; upstream Pendel is GPL-3.0-only) | Pendel |
+| `link/` | Ableton Link 4.1.1: tempo, beat and start/stop sync with other apps on the network (`platforms/sdl/link.cpp`). `include/`, `cmake_include/` and asio's headers (`modules/asio-standalone/`, BSL-1.0) only: Link's tests, examples and `src/` are left out. | GPL-2.0-or-later (or a licence from Ableton) | [Ableton/link](https://github.com/Ableton/link) tag `Link-4.1.1` (`5ba907ae`), asio-standalone `8806a68` (1.38.2) |
 | `felucca-bsp/` | The hardware layer of the M-VAVE FM-1: `chip/` (clock, interrupts, flash, USB, boot, the update entry) and `boards/fm1/` (key scan and LEDs, audio, display wiring, ADC). Used by `platforms/fm1hw/`. | MPL-2.0 (SDK: Apache-2.0, not included) | [felucca-bsp](https://github.com/hugelton/felucca-bsp), pinned by Felucca 2.0 at `5942e68b`; copied from `firmware/bsp` of the 2026-11-04 snapshot |
 
 ## Why a copy and not a submodule

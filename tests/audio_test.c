@@ -124,9 +124,58 @@ static void test_master_outside(void)
     assert(loud && k_audio_master_q12(&a) == 0 && k_audio_master_q12(&b) == 4096);
 }
 
+/* Ableton Link's phase lock (k_audio_phase_lock): 48 kHz, 120 BPM, a 16th 6000 frames */
+static void test_phase_lock(void)
+{
+    const int64_t f16 = (int64_t)6000 << 16;
+    KApp g;
+    KAudio a;
+    float buf[2];
+    k_init(&g);
+    k_audio_init(&a, 48000); k_audio_sync(&a, &g);
+    k_audio_phase_lock(&a, 3 << 16, f16);   /* stopped: nothing moves */
+    assert(a.frames_to_step == 0 && a.current_step == -1);
+    g.playing = 1; k_audio_sync(&a, &g);
+    k_audio_phase_lock(&a, (int64_t)21 << 15, f16);   /* PLAY in the session's bar at 10.5: step 0 waits 5.5 16ths for the next bar */
+    advance(&a, 33000);
+    assert(a.current_step == -1 && a.triggers[0] == 0);
+    k_audio_render(&a, buf, 1);
+    assert(a.current_step == 0 && a.triggers[0] == 1 && a.last_trigger_frame[0] == 33000);
+    advance(&a, 1000);   /* the session says a quarter of the 16th has gone (1500 frames), the sequencer 1000: step 1 at 4500 */
+    k_audio_phase_lock(&a, 1 << 14, f16);
+    advance(&a, 4500);
+    assert(a.current_step == 0);
+    k_audio_render(&a, buf, 1);
+    assert(a.current_step == 1);
+    advance(&a, 1000);
+    k_audio_phase_lock(&a, (int64_t)19 << 15, f16);   /* far off (the session at 9.5): on to its next step, 10, half a 16th away */
+    assert(a.next_step == 10);
+    advance(&a, 3000);
+    assert(a.current_step == 1);
+    k_audio_render(&a, buf, 1);
+    assert(a.current_step == 10);
+
+    k_audio_init(&a, 48000); k_audio_sync(&a, &g);   /* PLAY just after the bar began (under an eighth of a 16th): at once */
+    k_audio_phase_lock(&a, 1 << 12, f16);
+    k_audio_render(&a, buf, 1);
+    assert(a.current_step == 0 && a.last_trigger_frame[0] == 0);
+
+    g.swing = 50; k_audio_init(&a, 48000); k_audio_sync(&a, &g);   /* swing: an odd step 0.2 of a 16th late, in the session's bar too */
+    k_audio_phase_lock(&a, 0, f16);
+    k_audio_render(&a, buf, 1);
+    advance(&a, 10);
+    k_audio_phase_lock(&a, 0, f16);   /* (as at 0 again: step 1 is 1.2 16ths away) */
+    advance(&a, 7200);
+    assert(a.current_step == 0);
+    k_audio_render(&a, buf, 1);
+    assert(a.current_step == 1);
+    printf("phase lock: bar start, nudge, jump, swing\n");
+}
+
 int main(void)
 {
     test_master_outside();
+    test_phase_lock();
     KApp project;
     KAudio a, b;
     float test[2 * 512];

@@ -6,6 +6,10 @@
 #include "kreisel_engine_api.h"   /* k_param_id: a parameter by its label's id */
 #include "kreisel_level.h"
 #include <string.h>
+#if K_WITH_SAMPLES
+#include "sample/k_smp.h"   /* SMPL: a Sampler track's file (Linux and macOS) */
+#include "kreisel_audio.h"   /* K_SAMPLER_UID */
+#endif
 
 #define MAGIC0 'K'
 #define MAGIC1 'R'
@@ -149,6 +153,32 @@ static void wprms(W *w, const KApp *a, int t, int as, unsigned mask)
     }
 }
 #define ALL_PAGES ((1u << NPAGES) - 1u)
+/* SMPL (2026-11-14, Linux and macOS) for track t, written as track `as` (a preset: 0): the track's sample, its path (in the samples
+ * folder: relative), never the frames; nothing when it has none */
+#if K_WITH_SAMPLES
+static void wsmpl(W *w, int t, int as)
+{
+    const char *sp = k_smp_path(t);
+    const size_t n = strlen(sp);
+    size_t i;
+    if (!n) return;
+    wtag(w, TAG('S', 'M', 'P', 'L')); w16(w, (unsigned)(1 + n));
+    w8(w, (unsigned)as);
+    for (i = 0; i < n; i++) w8(w, (uint8_t)sp[i]);
+}
+/* an SMPL chunk's path given to track t: printable ASCII only, never "..": 1 taken, 0 refused */
+static int load_smpl(int t, const uint8_t *d, size_t len)
+{
+    char sp[K_SMP_NAME];
+    size_t q, ok = 1;
+    if (len < 2 || len > K_SMP_NAME || t < 0 || t >= K_TRACKS) return 0;
+    for (q = 0; q + 1 < len; q++) { sp[q] = (char)d[1 + q]; ok &= d[1 + q] >= 32 && d[1 + q] < 127; }
+    sp[len - 1] = 0;
+    if (!ok || strstr(sp, "..")) return 0;
+    k_smp_assign(t, sp);
+    return 1;
+}
+#endif
 /* a sound's pages: the inserts, the envelopes and where they go, the LFO (not the mixer, the buses, ARP, SCL) */
 static unsigned sound_mask(void)
 {
@@ -169,7 +199,11 @@ size_t k_song_max_size(void)
               + (CH_HDR + 1 + 1 + K_ROLL_NOTES * 4)                     /* ROLL */
               + (CH_HDR + 1 + K_LANES * 2 + 3 * K_LANES * 2)            /* DRUM */
               + (CH_HDR + 1 + params)                                   /* PRMS */
-              + (CH_HDR + 1 + 4 * 4);                                   /* PROB */
+              + (CH_HDR + 1 + 4 * 4)                                    /* PROB */
+#if K_WITH_SAMPLES
+              + (CH_HDR + 1 + K_SMP_NAME)                               /* SMPL */
+#endif
+              ;
     return HDR + (CH_HDR + 6) + (CH_HDR + 2 + K_SCENES * ((K_TRACKS + 1) / 2)) + (CH_HDR + K_NAME_LEN) + K_TRACKS * per_track + CRCLEN;
 }
 
@@ -227,6 +261,9 @@ size_t k_song_save(const KApp *a, uint8_t *buf, size_t cap)
             w8(&w, (unsigned)t);
             for (j = 0; j < 4; j++) w32(&w, a->chance[t][j]);
         }
+#if K_WITH_SAMPLES
+        wsmpl(&w, t, t);
+#endif
     }
     return finish(&w, buf, cap, len_at);
 }
@@ -471,11 +508,17 @@ int k_song_load(KApp *a, const uint8_t *buf, size_t n)
     k_set_shown(a, shown);
     a->master = clampi(master, 0, 100);
     a->octave = clampi(octave, -3, 3);
+#if K_WITH_SAMPLES
+    k_smp_clear_all();   /* (a song's tracks have no sample but what its SMPL chunks give them) */
+#endif
     for (pos = HDR; pos < end;) {
         uint32_t tag;
         const uint8_t *d = buf + pos + CH_HDR;
         size_t len = r16(buf + pos + 4);
         tag = TAG(buf[pos], buf[pos + 1], buf[pos + 2], buf[pos + 3]);
+#if K_WITH_SAMPLES
+        if (tag == TAG('S', 'M', 'P', 'L') && len >= 2) load_smpl(d[0], d, len);   /* (never trusted: load_smpl) */
+#endif
         if (tag == TAG('G', 'L', 'O', 'B') && len >= 5) {
             const KParamDesc *c = k_page_desc(K_PAGE_CLOCK);
             a->bpm = k_param_clamp(&c[0], d[0]); a->swing = k_param_clamp(&c[1], d[1]); a->clock_src = k_param_clamp(&c[2], d[2]);
@@ -516,7 +559,11 @@ size_t k_preset_max_size(void)
     size_t params = 0;
     int i;
     for (i = 0; i < NPAGES; i++) if (sound_mask() >> i & 1u) params += (size_t)pcount(PAGES[i].page) * 3u;
-    return HDR + (CH_HDR + K_NAME_LEN) + (CH_HDR + 1 + 4 + 1 + 1 + 1 + 1 + K_ENGINE_PARAMS * 3) + (CH_HDR + 1 + K_LANES * K_LANE_VALS) + (CH_HDR + 1 + params) + CRCLEN;   /* (TRAK's lanes, or KIT) */
+    return HDR + (CH_HDR + K_NAME_LEN) + (CH_HDR + 1 + 4 + 1 + 1 + 1 + 1 + K_ENGINE_PARAMS * 3) + (CH_HDR + 1 + K_LANES * K_LANE_VALS) + (CH_HDR + 1 + params) + CRCLEN   /* (TRAK's lanes, or KIT) */
+#if K_WITH_SAMPLES
+           + (CH_HDR + 1 + K_SMP_NAME)   /* SMPL */
+#endif
+           ;
 }
 size_t k_preset_save(const KApp *a, int t, const char *name, uint8_t *buf, size_t cap)
 {
@@ -535,6 +582,9 @@ size_t k_preset_save(const KApp *a, int t, const char *name, uint8_t *buf, size_
         for (l = 0; l < K_LANES; l++) for (j = 0; j < K_LANE_VALS; j++) w8(&w, (unsigned)clampi(a->lane_p[t][l][j], 0, 127));
     }
     wprms(&w, a, t, 0, sound_mask());
+#if K_WITH_SAMPLES
+    if (k_engine_uid(a->sound[t]) == K_SAMPLER_UID) wsmpl(&w, t, 0);   /* (a Sampler's sound is its file too, 2026-11-19) */
+#endif
     return finish(&w, buf, cap, len_at);
 }
 int k_preset_load(KApp *a, int t, const uint8_t *buf, size_t n)
@@ -558,6 +608,9 @@ int k_preset_load(KApp *a, int t, const uint8_t *buf, size_t n)
             for (l = 0; l < K_LANES; l++) for (j = 0; j < K_LANE_VALS; j++)
                 a->lane_p[t][l][j] = j < nv ? clampi(d[l * nv + j], 0, !j ? K_DRUM_PIECES - 1 : j >= K_LANE_ENV ? 100 : 127) : 50;
         } else if (tag == TAG('P', 'R', 'M', 'S')) load_prms_to(a, t, d, len);
+#if K_WITH_SAMPLES
+        else if (tag == TAG('S', 'M', 'P', 'L')) load_smpl(t, d, len);   /* (the preset's file onto this track; none in it: the track's as it was) */
+#endif
         pos += CH_HDR + len;
     }
     return K_SONG_OK;

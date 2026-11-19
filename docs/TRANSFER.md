@@ -55,7 +55,13 @@ To send a desktop song to the FM-1: SAVE it into a slot, copy `songs/songN.krs` 
 
 ## In a browser
 
-`platforms/fm1hw/transfer.html` does the same in Chrome or Edge (Web Serial), with nothing to install: open the file, press
-Connect, pick the FM-1's port. It lists the slots; Pull downloads a slot as a .fune file, Push sends one into a slot (checked as
-`fm1_slots.py` checks it: its header and CRC-16, then CRC-32 both ways; the FM-1 checks again before it writes, and refuses while
-it plays). Not yet tried against the device.
+`platforms/web/transfer/` does the same in Chrome or Edge (Web Serial), with nothing to install: the page *Songs and presets*,
+beside the web installer (`platforms/web/installer/build.sh` puts it in the installer's `transfer/`). Connect, pick the FM-1's
+port; it lists the slots (presets: the used ones, the empty ones on request). Download saves a slot as a .fune file; Load (an
+empty slot) or Replace (asks first) sends one in, and a file dropped on a slot does the same. *Back up all* saves every used slot
+in one zip (`songs/01-NAME.fune`, `presets/..`). Files are checked as `fm1_slots.py` checks them: the header and CRC-16, then
+CRC-32 both ways; the FM-1 checks again before it writes, and refuses while it plays (the page says to stop it).
+
+`transfer.js` holds the console code; `tests/transfer_test.mjs` runs it against a simulated console (in ctest), or against the
+FM-1 (`--port /dev/cu.usbmodem...`: reads every slot; `--write N` also writes a song into slot N and reads it back). On the FM-1
+(2026-11-15): a 1.6 KB song read in ~1.4 s, written and read back in ~3.2 s.

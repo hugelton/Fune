@@ -17,5 +17,6 @@
     <key>CFBundleTypeExtensions</key><array><string>fune</string></array>
     <key>CFBundleTypeRole</key><string>Editor</string>
   </dict></array>
+  <key>NSMicrophoneUsageDescription</key><string>Fune records from the input into the Sampler.</string>
   <key>NSHumanReadableCopyright</key><string>© 2026 Hügelton Instruments</string>
 </dict></plist>

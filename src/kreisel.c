@@ -543,9 +543,12 @@ void k_init(KApp *a) {
     a->shown=K_DEFAULT_SHOWN;
     a->touched=0;
     a->beat=-1;
-    a->step=-1;a->last_idx=-1;
+    a->step=-1;a->last_idx=-1;a->step_seen=-1;
     a->battery=-1;
     a->master=80;
+#if K_WITH_CONNECT
+    a->link_peers=-1;
+#endif
     a->group_held=-1;
     a->undo_t=-1;a->tool_rng=0x2545F491u;k_tools_init(a);
     for(t=0;t<K_TRACKS;t++) {
@@ -605,12 +608,22 @@ static const struct { const char *name; uint8_t tab, n; const char *const *v; } 
     {"Learn",3,0,0},   /* (an action: OK starts MIDI learn, k_learn_start) */
 #endif
     {"USB level",1,2,SV_USB},
+#if K_WITH_CONNECT
+    {"Link",3,2,SV_OFFON},
+#endif
 };
 static const char *const SET_TABS[K_SETTING_TABS]={"Display","System","Metro",
 #if K_WITH_CONNECT
     "Connect",
 #endif
 };
+static int k_link_on(const KApp *a) {   /* Ableton Link on (the steps keep the session's bar: no bar counted in) */
+#if K_WITH_CONNECT
+    return a->link_peers>=0&&a->set_v[K_SET_LINK];
+#else
+    (void)a;return 0;
+#endif
+}
 const char *k_setting_name(int i) { return i>=0&&i<K_SETTINGS?SETS[i].name:""; }
 int k_setting_tab(int i) { return i>=0&&i<K_SETTINGS?SETS[i].tab:0; }
 const char *k_setting_tab_name(int t) { return t>=0&&t<K_SETTING_TABS?SET_TABS[t]:""; }
@@ -622,6 +635,7 @@ int k_setting_visible(const KApp *a,int i) {
     if(i==K_SET_USB_LEVEL)return (a->lay&K_LAY_USB_AUDIO)!=0;   /* (the animations stay; the row, which nothing read, is gone; its value kept in the files) */
 #if K_WITH_CONNECT
     if(i>=K_SET_MIDI_IN&&i<=K_SET_MIDI_LEARN)return (a->lay&K_LAY_CONNECT)!=0;
+    if(i==K_SET_LINK)return (a->lay&K_LAY_CONNECT)!=0&&a->link_peers>=0;
 #endif
     return 1;
 }
@@ -638,6 +652,11 @@ const char *k_setting_value(const KApp *a,int i) {
     if(i==K_SET_MIDI_CLOCK)return a->clock_src?"Follow":"Internal";
     if(i==K_SET_MIDI_IN&&a->set_v[i]==2)return k_io_in_name()[0]?k_io_in_name():"Named";   /* (a part of a port's name, from io.conf) */
     if(i==K_SET_MIDI_LEARN)return "Start";
+    if(i==K_SET_LINK&&a->set_v[i]&&a->link_peers>0){   /* on, with others in the session: how many */
+        static char peers[12];
+        snprintf(peers,sizeof peers,"%d peer%s",a->link_peers,a->link_peers==1?"":"s");
+        return peers;
+    }
 #endif
     if(i<0||i>=K_SETTINGS||!SETS[i].n)return "";
     return SETS[i].v[a->set_v[i]<SETS[i].n?a->set_v[i]:0];
@@ -662,9 +681,15 @@ static void setting_turn_at(KApp *a,int i,int d,int wrap) {   /* wrap: a tap or 
 static void song_clear(KApp *a) {
     const unsigned lay=a->lay;const int shown=a->shown,battery=a->battery,charging=a->charging,master=a->master,octave=a->octave;
     const uint32_t clock_ms=a->clock_ms;const uint8_t pending=a->set_pending;uint8_t set_v[K_SETTINGS];
+#if K_WITH_CONNECT
+    const int8_t link_peers=a->link_peers;
+#endif
     memcpy(set_v,a->set_v,sizeof set_v);
     k_init_released(a);
     a->lay=lay;a->clock_ms=clock_ms;memcpy(a->set_v,set_v,sizeof set_v);a->set_pending=pending;   /* (a setting changed before: still to keep) */
+#if K_WITH_CONNECT
+    a->link_peers=link_peers;
+#endif   /* (a setting changed before: still to keep) */
     k_set_battery(a,battery,charging);k_set_shown(a,shown);a->master=master;a->octave=octave;
     memset(a->steps,0,sizeof a->steps);memset(a->lane_on,0,sizeof a->lane_on);memset(a->lane_pat,0,sizeof a->lane_pat);   /* (no first pattern either: all clear) */
     k_balloon_show(&a->balloon,K_BALLOON_ERASED,clock_ms);
@@ -1043,6 +1068,9 @@ static void value_delta(KApp *a,int delta,uint32_t ms) {
         a->track=n.index;add_param(a,K_PAGE_MIXER,0,delta);a->track=t;
     }
 }
+#define K_TOOLS_HOLD_MS 500u   /* SEQ held this long: its tools (as HOME held: the settings) */
+static void held_tools(KApp *a,int g,uint32_t ms);
+static void rec_flush(KApp *a);
 void k_tick(KApp *a,uint32_t time_ms) {
     a->clock_ms=time_ms;
     if(a->page==K_PAGE_SONG&&a->song_play&&a->playing&&a->song_scene>=0&&
@@ -1083,6 +1111,8 @@ void k_tick(KApp *a,uint32_t time_ms) {
                 }
         }
     }
+    if(a->playing&&a->step>=0){if(a->step!=a->step_seen){a->step_seen=a->step;a->step_ms=time_ms;}}else a->step_seen=-1;
+    if(a->rec_wait_n&&(!a->playing||a->step!=a->rec_wait_from))rec_flush(a);   /* (the playhead on the next step, or stopped) */
     if(a->set_pending && !a->settings_open && !a->playing && (uint32_t)(time_ms-a->set_try_ms)>=2000u){   /* (a flash erase: not while playing) */
         a->set_try_ms=time_ms;
         if(k_settings_save(a)==0)a->set_pending=0;   /* (a failed write is tried again, every 2 s) */
@@ -1091,7 +1121,14 @@ void k_tick(KApp *a,uint32_t time_ms) {
         a->home_fired=2;   /* (2: the hold opened them; SELECT or OCT turned while HOME is still held closes them again) */
         if(K_SETTINGS>0){a->settings_open=1;a->settings_sel=k_setting_first(a);a->menu_open=0;a->save_open=0;a->save_ask=0;a->set_ask=0;}
     }
-    /* (a page key held alone does nothing: held + SELECT opens its tools, k_dispatch) */
+    /* a page key held + SELECT opens its tools (k_dispatch). SEQ held alone a while opens them too (
+     *); its release then leaves them open, as after SELECT. The other page keys held
+     * alone still do nothing (GLO held is mute and solo's modifier) */
+    if(a->group_held==K_GROUP_PATTERN && !a->group_combo && !a->tools_open && !a->menu_open && !a->settings_open && !a->save_open &&
+       !a->save_ask && !a->name_open && (uint32_t)(time_ms-a->held_since_ms)>=K_TOOLS_HOLD_MS){
+        a->group_combo=1;   /* (its release: no page turn) */
+        held_tools(a,K_GROUP_PATTERN,time_ms);
+    }
 }
 /* a key of the bed. A drum track, on every page: a black key picks its lane and plays it, a white key switches a step of that lane. STEP: a white key switches a step. ROLL, after Felucca's step
  * entry: with the track armed (REC) and stopped, the keys pressed together write the step in hand and the cursor moves on when
@@ -1135,14 +1172,50 @@ int k_take_note(KApp *a,KNoteEv *out){
 /* armed (REC), a synth track: a note played is written. Playing: at the step the playhead is on, beside what is there (live, a
  * chord as it is played). Stopped, after Felucca's step entry: at the step in hand, the notes held together a chord there (the
  * first of them clears it), the length the last one had; all of them up, the cursor moves on (key_event, k_note_in) */
+/* live REC: the step a note played now goes to, the nearer one: a key in the second half of a step lands on
+ * the next, so a key a little early is on the beat. The half from when k_tick saw the step begin (the playhead is the audio's on
+ * most platforms) and the action's time (a->clock_ms); -1 not playing */
+static int rec_step(const KApp *a){
+    int s;
+    if(!a->playing||a->step<0)return -1;
+    s=a->step%K_STEPS;
+    if(a->step_seen==a->step&&a->bpm>0&&k_umul((uint32_t)(a->clock_ms-a->step_ms),(uint32_t)a->bpm)*2u>=15000u)s=(s+1)%K_STEPS;   /* (a 16th: 15000 / bpm ms) */
+    return s;
+}
 static int midi_held(const KApp *a){int i;for(i=0;i<128;i++)if(a->midi_on[i])return 1;return 0;}
+/* a note or a hit for the next step, kept back until the playhead is on it (0: the queue is full, write it now) */
+static int rec_wait(KApp *a,int t,int at,int note,int vel,int lane){
+    const int n=a->rec_wait_n;
+    if(n>=8)return 0;
+    a->rec_wait[n].t=(uint8_t)t;a->rec_wait[n].at=(uint8_t)at;a->rec_wait[n].note=(uint8_t)note;a->rec_wait[n].vel=(uint8_t)vel;a->rec_wait[n].lane=(uint8_t)lane;
+    a->rec_wait_n=(uint8_t)(n+1);a->rec_wait_from=(int8_t)a->step;
+    return 1;
+}
+static void rec_flush(KApp *a){
+    int i;
+    for(i=0;i<a->rec_wait_n;i++){
+        const int t=a->rec_wait[i].t,at=a->rec_wait[i].at;
+        if(a->rec_wait[i].lane!=0xFF){k_lane_step_set(a,t,a->rec_wait[i].lane,at&15,1);continue;}
+        a->rsel[t]=k_roll_add(a,t,at>>4,at&15,a->rec_wait[i].note,1,a->rec_wait[i].vel);a->cur[t]=at&15;
+        if(t==a->track)roll_pick(a,t);
+    }
+    a->rec_wait_n=0;
+}
+/* live REC, a drum track: the lane's hit at the nearer step (the next one kept back: rec_wait); stopped, at the step in hand */
+static void rec_lane(KApp *a,int t,int lane){
+    const int s=rec_step(a);
+    if(s<0){k_lane_step_set(a,t,lane,a->cur[t],1);return;}
+    if(s!=a->step%K_STEPS&&rec_wait(a,t,s,0,0,lane))return;
+    k_lane_step_set(a,t,lane,s,1);
+}
 static void rec_note(KApp *a,int t,int note,int vel){
     const int p=a->pattern[t];
     if(a->playing&&a->step>=0){
-        const int s=a->step%K_STEPS;int i;
-        a->rsel[t]=k_roll_add(a,t,p,s,note,1,vel);a->cur[t]=s;
+        const int s=rec_step(a);int i,later=0;
+        if(s!=a->step%K_STEPS&&rec_wait(a,t,p<<4|s,note,vel,0xFF))later=1;   /* (the next step: written as the playhead gets there) */
+        else{a->rsel[t]=k_roll_add(a,t,p,s,note,1,vel);a->cur[t]=s;}
         for(i=0;i<8&&a->rec_held[i].on;i++){}
-        if(i<8&&a->rsel[t]>=0){a->rec_held[i].t=(uint8_t)t;a->rec_held[i].at=(uint8_t)(p<<4|s);a->rec_held[i].note=(uint8_t)note;a->rec_held[i].on=1;}   /* (a step long until let go) */
+        if(i<8&&(later||a->rsel[t]>=0)){a->rec_held[i].t=(uint8_t)t;a->rec_held[i].at=(uint8_t)(p<<4|s);a->rec_held[i].note=(uint8_t)note;a->rec_held[i].on=1;}   /* (a step long until let go) */
     }
     else{
         const int s=a->cur[t];
@@ -1156,7 +1229,7 @@ static void rec_note(KApp *a,int t,int note,int vel){
 static void rec_release(KApp *a,int t,int note){
     int i,k;
     for(i=0;i<8;i++)if(a->rec_held[i].on&&a->rec_held[i].t==t&&a->rec_held[i].note==note){
-        const int s0=a->rec_held[i].at&15,now=a->playing&&a->step>=0?a->step%K_STEPS:s0;
+        const int s0=a->rec_held[i].at&15,now=a->playing&&a->step>=0?rec_step(a):s0;
         int len=(now-s0+K_STEPS)%K_STEPS;
         a->rec_held[i].on=0;
         if(len<1)len=1;
@@ -1176,7 +1249,7 @@ void k_lane_hit(KApp *a,int lane,int vel){
     if(lane_hit_t[lane])note_push(a,lane_hit_t[lane]-1,lane,0);
     note_push(a,t,lane,clamp(vel,1,127));lane_hit_t[lane]=(uint8_t)(t+1);
     a->cur_lane[t]=lane;
-    if(a->recording&&!counting_in(a))k_lane_step_set(a,t,lane,a->playing&&a->step>=0?a->step:a->cur[t],1);
+    if(a->recording&&!counting_in(a))rec_lane(a,t,lane);
 }
 void k_mod_in(KApp *a,int v127){
     const KParamRef r=k_param_ref(a,K_PAGE_HOME,0);
@@ -1199,7 +1272,7 @@ void k_note_in(KApp *a,int note,int vel){
         if(l>=K_LANES)l=-1;   /* (the cymbals: no lane of the eight) */
         if(l>=0){if(a->midi_on[note])note_push(a,a->midi_on[note]-1,a->midi_lane[note],0);   /* (that note held before, maybe on a synth track: let go first) */
             note_push(a,t,l,clamp(vel,1,127));a->midi_on[note]=(uint8_t)(t+1);a->midi_lane[note]=(uint8_t)l;
-            if(a->recording&&!counting_in(a))k_lane_step_set(a,t,l,a->playing&&a->step>=0?a->step:a->cur[t],1);}
+            if(a->recording&&!counting_in(a))rec_lane(a,t,l);}
         return;
     }
     if(a->midi_on[note])note_push(a,a->midi_on[note]-1,a->midi_lane[note],0);   /* (the same note again: the one before let go first) */
@@ -1237,7 +1310,7 @@ static void key_event(KApp *a,int id,int down,uint32_t ms) {
         a->keys_down|=1u<<id;a->key_note[id]=(uint8_t)(id-K_STEPS);
         note_push(a,t,id-K_STEPS,100);
         k_io_note_out(t,k_audio_gm_drum[id-K_STEPS],100);   /* (MIDI out: the lane's General MIDI drum) */
-        if(a->recording&&!counting_in(a))k_lane_step_set(a,t,id-K_STEPS,a->playing&&a->step>=0?a->step:a->cur[t],1);
+        if(a->recording&&!counting_in(a))rec_lane(a,t,id-K_STEPS);
         return;
     }
     if(down && (a->page==K_PAGE_STEP||a->page==K_PAGE_DRUM)){   /* the step pages: the keys are the steps */
@@ -1376,8 +1449,14 @@ static int tools_dispatch(KApp *a,KAction e){
 }
 /* an action; then, arrived at a drum track (another track, or this one's engine now DRUM), the hint: its black keys pick the lane
  * (HELP ON; the UI shows it where keys are) */
+#if K_WITH_SAMPLES
+int (*k_action_hook)(KApp *a,const KAction *e);
+#endif
 void k_dispatch(KApp *a,KAction e) {
     const int t0=a->track,d0=k_is_drum(a,t0),c0=a->cur[t0],p0=a->pattern[t0];
+#if K_WITH_SAMPLES
+    if(k_action_hook&&!a->boom&&k_action_hook(a,&e))return;   /* (the Sampler's page: REC records the input, PRESETS step the files) */
+#endif
     if(a->boom&&(e.type==K_ACT_TOOLS||e.type==K_ACT_ACCEPT||e.type==K_ACT_BACK||e.type==K_ACT_SAVE||(e.type==K_ACT_OCTAVE_DELTA&&e.a)||
                  (e.type==K_ACT_POINTER&&e.a==-1))){a->boom=0;return;}   /* Dynamite lit: pressed again, put out (nothing cleared) */
     a->act_n++;
@@ -1675,7 +1754,7 @@ static void dispatch(KApp *a,KAction e) {
         case K_ACT_REC:a->recording=!a->recording;break;
         case K_ACT_PLAY:a->playing=!a->playing;a->count_in=0;
             if(a->playing){a->play_ms=e.time_ms;a->last_idx=-1;a->clk.pulses=a->clk.pend=0;a->clk.seen=a->clk.cont=0;
-                if(a->recording&&a->set_v[K_SET_COUNT]&&a->clock_src<=0){   /* armed, Count-in: a bar of clicks first, the steps after it */
+                if(a->recording&&a->set_v[K_SET_COUNT]&&a->clock_src<=0&&!k_link_on(a)){   /* armed, Count-in: a bar of clicks first, the steps after it */
                     a->count_in=1;a->play_ms=e.time_ms+240000u/(uint32_t)(a->bpm>0?a->bpm:120);a->step=-1;a->beat=0;}
                 /* on SONG: the song, from the scene in hand (its column), a bar a scene, to its end; elsewhere the patterns in hand loop */
                 a->song_play=a->page==K_PAGE_SONG;

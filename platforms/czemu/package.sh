@@ -38,7 +38,7 @@ stage() {   # stage OS LIBFILE EMU_HOWTO EMU_WHERE DATA MIDI
   cp "$lib" "$d/"
   cp platforms/czemu/run.sh "$d/run.sh"
   cp LICENSE "$d/LICENSE.txt"; cp LICENSING.md "$d/"
-  python3 tools/make_notices.py host "$d/THIRD_PARTY_NOTICES.txt" >/dev/null
+  python3 tools/make_notices.py host "$d/THIRD_PARTY_NOTICES.txt" --no-link >/dev/null   # (no SDL app here: no Link)
   python3 - "$d/README.txt" "$os" "$name" "$(basename "$lib")" "$3" "$4" "$5" "$6" "$EMU_REV" "$VERSION" "$DATE" <<'PY'
 import sys
 out, os_, name, lib, howto, where, data, midi, rev, ver, date = sys.argv[1:]
@@ -73,13 +73,13 @@ linux-x86_64)
     set -eo pipefail
     T=build/czemu/linux-tree
     cmake -S . -B $T -DCMAKE_BUILD_TYPE=Release -DKREISEL_BUILD_SDL=OFF -DKREISEL_BUILD_UI=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON >/dev/null
-    cmake --build $T -j4 --target kreisel_core kreisel_ui kreisel_store_file 2>&1 | grep -E "error|Error" || true
+    cmake --build $T -j4 --target kreisel_core kreisel_ui kreisel_store_file kreisel_sample 2>&1 | grep -E "error|Error" || true
     E=build_sim/Emulator
-    cc -O2 -shared -fPIC -DLV_CONF_INCLUDE_SIMPLE -o build/czemu/libFune.so \
-      platforms/czemu/czemu.c platforms/sdl/input.c platforms/sdl/panel.c platforms/sdl/midi.c platforms/sdl/desk.c platforms/sdl/controllers.c \
+    cc -O2 -shared -fPIC -DLV_CONF_INCLUDE_SIMPLE -DK_WITH_SAMPLES=1 -o build/czemu/libFune.so \
+      platforms/czemu/czemu.c platforms/sdl/sampler.c platforms/sdl/input.c platforms/sdl/panel.c platforms/sdl/midi.c platforms/sdl/desk.c platforms/sdl/controllers.c \
       platforms/net/kr_rtpmidi.c platforms/net/kr_mdns.c \
       -Iplatforms/net -I$E -I$E/lib -I$E/lib/lvgl -Isrc -Isrc/ui -Iplatforms/sdl -I$T/gen $(sdl2-config --cflags) \
-      $T/libkreisel_ui.a $T/libkreisel_store_file.a $T/libkreisel_core.a -lm -Wl,--unresolved-symbols=ignore-all
+      $T/libkreisel_ui.a $T/libkreisel_store_file.a $T/libkreisel_core.a $T/libkreisel_sample.a -lm -Wl,--unresolved-symbols=ignore-all
     if nm -D --undefined-only build/czemu/libFune.so | grep -E " (k_|g_|ui_|sdl_|desk_|kr_|panel_)"; then echo "error: left to the emulator (above)"; exit 1; fi
     strip --strip-unneeded build/czemu/libFune.so
     file build/czemu/libFune.so

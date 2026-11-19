@@ -351,6 +351,9 @@ int ui_draw(KApp *a, KCursorVisual *c, uint32_t now_ms)
         case K_PAGE_DRUM: if (a->rows_view) pic_rows(a); else pic_drum(a); break;
         case K_PAGE_ROLL: if (a->rows_view) pic_rows(a); else { pic_roll(a); busy |= roll_moving; } break;
         case K_PAGE_SOUND:   /* an engine's own view, by its id (the UI's, never the engine's code); else the vanilla one */
+#if K_WITH_SAMPLES && !defined(KREISEL_BITMAP_FONT)
+            if (sampler_view(a)) { busy |= sampler_live; break; }   /* (the Sampler: Linux and macOS) */
+#endif
             {   uint32_t u = k_engine_uid(a->sound[a->track]);
                 if (!plugin_layout_view(a) && !switch_synth_view(a) && !wide_panel_view(a) && !(u == K_UID('K', 'A', 'N', 'L') && synth_view_kanalog(a)) && !(u == K_UID('K', 'L', 'O', 'F') && lofi_view_sel(a)) &&
                     !(u == K_UID('K', 'T', 'R', 'I') && synth_view_ktrio(a)) && !(u == K_UID('K', 'P', 'H', 'S') && synth_view_kphase(a)) &&

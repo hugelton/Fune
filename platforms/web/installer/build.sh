@@ -12,6 +12,7 @@ rm -rf "$OUT" && mkdir -p "$OUT"
 cp platforms/web/installer/index.html platforms/web/installer/installer.js platforms/web/installer/page.js "$OUT/"
 cp platforms/web/icon-192.png platforms/web/installer/screens.jpg "$OUT/"
 cp LICENSE "$OUT/LICENSE.txt"
+mkdir -p "$OUT/transfer" && cp platforms/web/transfer/index.html platforms/web/transfer/page.js platforms/web/transfer/transfer.js "$OUT/transfer/"   # songs and presets (Web Serial)
 python3 tools/make_notices.py firmware "$OUT/THIRD_PARTY_NOTICES.txt" >/dev/null
 python3 - "$OUT" <<'EOF'
 import hashlib, json, os, re, shutil, sys

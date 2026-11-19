@@ -17,15 +17,15 @@ if [ ! -x "$EMU/build/cardputer-emu" ]; then
   cmake -S "$EMU" -B "$EMU/build" -DCMAKE_BUILD_TYPE=Release >/dev/null
   cmake --build "$EMU/build" -j8 >/dev/null
 fi
-cmake --build "$ROOT/build" --target kreisel_core kreisel_ui kreisel_store_file >/dev/null
+cmake --build "$ROOT/build" --target kreisel_core kreisel_ui kreisel_store_file kreisel_sample >/dev/null
 EXT=dylib; LINK="-undefined dynamic_lookup -framework CoreMIDI -framework CoreFoundation"; MIDI_EXTRA=""
 [ "$(uname)" = Linux ] && EXT=so && LINK="-Wl,--unresolved-symbols=ignore-all" && MIDI_EXTRA="$ROOT/platforms/net/kr_rtpmidi.c $ROOT/platforms/net/kr_mdns.c"
 OUT="$SIM/libFune.$EXT"
 # shellcheck disable=SC2046
-cc -O2 -shared -fPIC -DLV_CONF_INCLUDE_SIMPLE -o "$OUT" \
-  "$ROOT/platforms/czemu/czemu.c" "$ROOT/platforms/sdl/input.c" "$ROOT/platforms/sdl/panel.c" "$ROOT/platforms/sdl/midi.c" "$ROOT/platforms/sdl/desk.c" "$ROOT/platforms/sdl/controllers.c" $MIDI_EXTRA \
+cc -O2 -shared -fPIC -DLV_CONF_INCLUDE_SIMPLE -DK_WITH_SAMPLES=1 -o "$OUT" \
+  "$ROOT/platforms/czemu/czemu.c" "$ROOT/platforms/sdl/sampler.c" "$ROOT/platforms/sdl/input.c" "$ROOT/platforms/sdl/panel.c" "$ROOT/platforms/sdl/midi.c" "$ROOT/platforms/sdl/desk.c" "$ROOT/platforms/sdl/controllers.c" $MIDI_EXTRA \
   -I"$ROOT/platforms/net" -I"$EMU" -I"$EMU/lib" -I"$EMU/lib/lvgl" -I"$ROOT/src" -I"$ROOT/src/ui" -I"$ROOT/platforms/sdl" -I"$ROOT/build/gen" \
-  $(sdl2-config --cflags) "$ROOT/build/libkreisel_ui.a" "$ROOT/build/libkreisel_store_file.a" "$ROOT/build/libkreisel_core.a" -lm $LINK   # (SDL: the emulator's own, linked into it: not a second copy)
+  $(sdl2-config --cflags) "$ROOT/build/libkreisel_ui.a" "$ROOT/build/libkreisel_store_file.a" "$ROOT/build/libkreisel_core.a" "$ROOT/build/libkreisel_sample.a" -lm $LINK   # (SDL: the emulator's own, linked into it: not a second copy)
 echo "built $OUT"
 [ "${1:-}" = "--no-run" ] && exit 0
 cd "$EMU/build" && exec ./cardputer-emu "$OUT"

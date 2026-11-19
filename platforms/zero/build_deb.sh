@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments
 # Fune for the Cardputer Zero as a .deb in M5Stack's APPLaunch layout (CardputerZero-AppBuilder's conventions, 2026-11-13):
 #   /usr/share/APPLaunch/apps/fune/        the program and its plugins
-#   /usr/share/APPLaunch/bin/fune          the start script (Wayland, else KMSDRM: platforms/zero/fune)
-#   /usr/share/APPLaunch/applications/fune.desktop, share/images/fune.png (48 px)   the launcher's entry and icon
+#   /usr/share/APPLaunch/bin/fune          the start script (the LCD through /dev/fb0, the sound: platforms/zero/fune)
+#   /usr/share/APPLaunch/applications/fune.desktop, share/images/fune.png, fune_80.png (80 px), fune_100.png (100 px), as the Zero's own apps   the launcher's entry and icon
 # No systemd service: it is an app the launcher starts (as the user pi), not a daemon. Built from our own binary only
 # in the same arm64 Debian container as platforms/zero/build.sh.
 #   bash platforms/zero/build_deb.sh    ->  build/zero/fune_<version>_arm64.deb
@@ -23,7 +23,10 @@ cp build/zero/tree/plugins/*.so "$A/plugins/"
 cp platforms/zero/fune "$A/fune"
 cp platforms/zero/README.txt LICENSE LICENSING.md "$ST/usr/share/doc/fune/"
 python3 tools/make_notices.py host "$ST/usr/share/doc/fune/THIRD_PARTY_NOTICES.txt" >/dev/null
-python3 -c "from PIL import Image; Image.open('assets/app/kreisel.png').resize((48, 48), Image.LANCZOS).save('$ST/usr/share/APPLaunch/share/images/fune.png')"
+python3 -c "
+from PIL import Image
+im = Image.open('assets/app/kreisel.png')
+for n, px in (('fune', 80), ('fune_80', 80), ('fune_100', 100)): im.resize((px, px), Image.LANCZOS).save('$ST/usr/share/APPLaunch/share/images/%s.png' % n)"
 cat >"$ST/usr/share/APPLaunch/bin/fune" <<'EOF'
 #!/bin/sh
 # APPLaunch's entry: the app's own start script (the display, the log in ~/.local/share/kreisel/log.txt)
@@ -38,7 +41,7 @@ Architecture: arm64
 Maintainer: HUGELTON INSTRUMENTS <info@hugelton.com>
 Section: APPLaunch
 Priority: optional
-Depends: libsdl2-2.0-0, libasound2
+Depends: libsdl2-2.0-0, libasound2t64 | libasound2, libstdc++6
 Homepage: https://hugelton.com/products/fune
 Description: Fune $LABEL, a small music studio for multiple platforms
  Four tracks of synths and drums, a step sequencer and effects, for the
@@ -47,6 +50,6 @@ EOF
 chmod 0755 "$A/bin/kreisel" "$A/fune" "$ST/usr/share/APPLaunch/bin/fune"
 chmod 0644 "$A/plugins/"*.so
 OUT="build/zero/fune_${DEBVER}_arm64.deb"
-docker run --rm --platform linux/arm64 -v "$PWD":/repo -w /repo argosy-portmaster:bookworm \
+docker run --rm --platform linux/arm64 -v "$PWD":/repo -w /repo fune-portmaster:bookworm \
   sh -c "chown -R root:root $ST && dpkg-deb --build --root-owner-group $ST $OUT >/dev/null && dpkg-deb -I $OUT && dpkg-deb -c $OUT && chown -R $(id -u):$(id -g) $ST $OUT"
 echo "deb: $OUT"

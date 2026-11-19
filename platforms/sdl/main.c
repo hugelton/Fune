@@ -23,15 +23,26 @@
 #include "panel.h"
 #include "input.h"
 #include "desk.h"
+#include "fbdev.h"
+#include "link.h"
+#include "console.h"
+#if K_WITH_SAMPLES
+#include "sampler.h"
+#endif
 
 /* Render callback: only KAudio is accessed on the SDL audio thread. */
 static void audio_callback(void *userdata, Uint8 *bytes, int length)
 {
-    k_audio_render((KAudio *)userdata, (float *)bytes, (size_t)length / (sizeof(float) * 2u));
+    const size_t frames = (size_t)length / (sizeof(float) * 2u);
+    sdl_link_audio((KAudio *)userdata, (uint32_t)frames);   /* (Ableton Link: the steps to the session's bar) */
+    k_audio_render((KAudio *)userdata, (float *)bytes, frames);
 }
 
 static void process_event(KApp *app,SDL_Event *e,SDL_Renderer *r,int *running){
     if(e->type==SDL_KEYDOWN&&!e->key.repeat&&e->key.keysym.sym==SDLK_F9){k_dispatch(app,(KAction){K_ACT_SAVE,0,0,SDL_GetTicks()});return;}   /* F9: SAVE (the song slots, the presets: desk_dir) */
+#if K_WITH_SAMPLES
+    if(e->type==SDL_DROPFILE&&e->drop.file&&sdl_sampler_drop(app,e->drop.file)){SDL_free(e->drop.file);return;}   /* a .wav: the Sampler's */
+#endif
     if(e->type==SDL_DROPFILE){if(e->drop.file){desk_open_file(app,e->drop.file);SDL_free(e->drop.file);}return;}   /* a .fune dropped on the window, or opened from the Finder */
     sdl_process_event(app,e,r,running);
 }
@@ -52,7 +63,7 @@ static int list_audio_devices(void){
 
 static void usage(void){
     int i;
-    fprintf(stderr,"usage: kreisel [--profile NAME | --size WxH [--input pad,touch,keyboard,mouse,knobs,keys]] [--theme dark] [--page N] [--font bitmap|vector] [--panel fm1] [--menu] [--touch K] [--free] [--fullscreen] [--shot FILE.bmp] [FILE.fune] | --audio-devices\nprofiles:");
+    fprintf(stderr,"usage: kreisel [--profile NAME | --size WxH [--input pad,touch,keyboard,mouse,knobs,keys]] [--theme dark] [--page N] [--font bitmap|vector] [--panel fm1] [--menu] [--touch K] [--free] [--fullscreen | --fb /dev/fbN [--keys /dev/input/eventN]] [--console PORT] [--shot FILE.bmp] [FILE.fune] | --audio-devices\nprofiles:");
     for(i=0;i<k_profile_count();i++){int w,h;k_profile_size(k_profile_at(i),&w,&h);fprintf(stderr," %s(%dx%d)",k_profile_at(i)->name,w,h);}
     fputc('\n',stderr);
 }
@@ -60,7 +71,7 @@ static void usage(void){
 static int desk_any_song(void){int i;for(i=0;i<K_SONG_SLOTS;i++)if(k_save_used(K_STORE_SONG,i))return 1;return 0;}   /* (a first start: none saved) */
 int main(int argc,char **argv){
     const KProfile *profile=k_profile_find("mac");   /* the desktop's own: 640 x 360, a mouse (--profile another device, --size any screen) */
-    const char *shot=NULL,*shot_all=NULL,*panel_name=NULL,*open_path=NULL;int page=0,i,menu=0,touch=-1,free_input=0,font=-1,fullscreen=0;KThemeId theme=K_THEME_DARK;
+    const char *shot=NULL,*shot_all=NULL,*panel_name=NULL,*open_path=NULL;int page=0,i,menu=0,touch=-1,free_input=0,font=-1,fullscreen=0;const char*fb_path=NULL,*keys_path=NULL;int console_port=0;KThemeId theme=K_THEME_DARK;
     for(i=1;i<argc;i++){
         if(!strcmp(argv[i],"--profile")&&i+1<argc){
             profile=k_profile_find(argv[++i]);
@@ -84,6 +95,9 @@ int main(int argc,char **argv){
         else if(!strcmp(argv[i],"--menu"))menu=1;
         else if(!strcmp(argv[i],"--free"))free_input=1;   /* every input, whatever the device has (for testing) */
         else if(!strcmp(argv[i],"--fullscreen"))fullscreen=1;   /* the whole screen (a device under a window manager: the Cardputer Zero's labwc) */
+        else if(!strcmp(argv[i],"--fb")&&i+1<argc)fb_path=argv[++i];   /* a Linux framebuffer, no window (the Cardputer Zero's LCD: platforms/sdl/fbdev.c) */
+        else if(!strcmp(argv[i],"--keys")&&i+1<argc)keys_path=argv[++i];
+        else if(!strcmp(argv[i],"--console")&&i+1<argc)console_port=atoi(argv[++i]);   /* the FM-1's console on 127.0.0.1:PORT (platforms/sdl/console.h: the demo video) */   /* with --fb: the evdev keyboard (else the first among /dev/input) */
         else if(!strcmp(argv[i],"--touch")&&i+1<argc)touch=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--panel")&&i+1<argc)panel_name=argv[++i];
         else if(!strcmp(argv[i],"--shot-all")&&i+1<argc)shot_all=argv[++i];
@@ -103,13 +117,14 @@ int main(int argc,char **argv){
         else {usage();return 2;}
     }
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS,"0");
-    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER|SDL_INIT_TIMER)!=0){
+    if(fb_path&&(shot||shot_all||panel_name)){usage();return 2;}
+    if(SDL_Init(fb_path?SDL_INIT_EVENTS|SDL_INIT_TIMER:SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER|SDL_INIT_TIMER)!=0){   /* --fb: no video (no EGL, no GL) */
         fprintf(stderr,"SDL initialization: %s\n",SDL_GetError());return 1;
     }
     int pw,ph;k_profile_size(profile,&pw,&ph);   /* the UI's size, in dp */
     int lw=pw+(panel_name?8+340:0),lh=ph>240?ph:240,scale=profile->px_w?1:panel_name?2:3;   /* a real screen: one window pixel a dp */
     if(!panel_name)lh=ph;
-    if(!profile->px_w){   /* the largest whole scale that fits the display (less its menu bar and dock): a 640 x 360 screen at 2 on a laptop, not 3 */
+    if(!profile->px_w&&!fb_path){   /* the largest whole scale that fits the display (less its menu bar and dock): a 640 x 360 screen at 2 on a laptop, not 3 */
         SDL_Rect ub;
         if(SDL_GetDisplayUsableBounds(0,&ub)==0){
             while(scale>1&&(lw*scale>ub.w*9/10||lh*scale>ub.h*9/10))scale--;
@@ -119,24 +134,34 @@ int main(int argc,char **argv){
     char data_dir[1024]="";DeskWindow keep={0};
     const int session=!(shot||shot_all)&&!panel_name&&profile==k_profile_find("mac");   /* the desktop app as itself: its session, its window */
     if(!(shot||shot_all)&&!desk_dir(data_dir,sizeof data_dir))data_dir[0]=0;
-    SDL_Window*window=SDL_CreateWindow("Fune",SDL_WINDOWPOS_CENTERED,
+    SDL_Window*window=NULL;SDL_Renderer*renderer=NULL;
+    if(fb_path){   /* the framebuffer and the evdev keyboard in place of a window */
+        if(fbdev_open(fb_path)!=0){SDL_Quit();return 1;}
+        fbdev_keys_open(keys_path);   /* (none: the screen still shows; MIDI still plays) */
+        if(!ui_draw_init(profile,theme)){fprintf(stderr,"draw init failed\n");return 1;}
+    }else{
+    window=SDL_CreateWindow("Fune",SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,lw*scale,lh*scale,SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|(fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0));
     if(!window){fprintf(stderr,"window: %s\n",SDL_GetError());SDL_Quit();return 1;}
-    SDL_Renderer*renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
+    renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
     if(!renderer)renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_SOFTWARE);
     if(!renderer){fprintf(stderr,"renderer: %s\n",SDL_GetError());SDL_DestroyWindow(window);SDL_Quit();return 1;}
     SDL_RenderSetLogicalSize(renderer,lw,lh);
     SDL_RenderSetIntegerScale(renderer,profile==k_profile_find("mac")?SDL_FALSE:SDL_TRUE);   /* the desktop's window fills as it is sized; a device's stays in whole pixels */
     if(!ui_draw_init(profile,theme)||!sdl_blit_init(renderer,pw,ph)){fprintf(stderr,"draw init failed\n");return 1;}
+    }
     if(font>=0)g_font_vector(font);   /* --font: over the profile's */
     if(panel_name&&!panel_init(renderer,panel_name,pw+8)){fprintf(stderr,"unknown panel: %s\n",panel_name);return 2;}
     SDL_GameController*controller=NULL;
-    for(i=0;i<SDL_NumJoysticks();i++)if(SDL_IsGameController(i)){
+    for(i=0;!fb_path&&i<SDL_NumJoysticks();i++)if(SDL_IsGameController(i)){
         controller=SDL_GameControllerOpen(i);if(controller)break;
     }
     KApp app;KCursorVisual cursor={0};int running=1;
     k_init(&app);k_set_shown(&app,profile->shown);k_set_layout(&app,k_profile_layout(profile));
     {static const KDeviceCaps caps={44100u,1u<<20,2000u,K_AUDIO_VOICES,K_NEED_FLOAT};k_plugin_set_caps(&caps);}   /* a desktop: room for any plugin built at 44.1 kHz */
+#if K_WITH_SAMPLES
+    {char sd[1024]="";if(data_dir[0])snprintf(sd,sizeof sd,"%s",data_dir);else if(!desk_dir(sd,sizeof sd))sd[0]=0;sdl_sampler_init(sd);}   /* the Sampler, first of the plugins' slots; its folder (screenshots too: a song's files) */
+#endif
     if(data_dir[0]){   /* outside plugins: <data>/plugins (before the song: it may name them) */
         char dir[1100];
         snprintf(dir,sizeof dir,"%s/plugins",data_dir);
@@ -145,9 +170,9 @@ int main(int argc,char **argv){
     if(data_dir[0]&&k_store_set(k_store_file(data_dir))==0){   /* SAVE's slots: <data>/songs, presets (screenshots: none, they stay deterministic) */
         k_settings_load(&app);
         if(session&&desk_session_load(&app,data_dir,&keep)==0)fprintf(stderr,"session: opened as it was left\n");   /* the desktop: where it was left */
-        else if(KREISEL_DEMO_SONG==1&&!(shot||shot_all)){if(k_demo_load(&app)==0)fprintf(stderr,"song: COLDWIRE (the demo, while developing)\n");}   /* (kreisel_demo.h) */
+        else if(KREISEL_DEMO_SONG==1&&!(shot||shot_all)){if(k_demo_load(&app)==0)fprintf(stderr,"song: %s (the demo, while developing)\n",k_demo_name);}   /* (kreisel_demo.h) */
         else if(!app.set_v[K_SET_RESTORE]&&k_save_boot(&app)==0)fprintf(stderr,"song: slot %d loaded\n",app.song_from);   /* else the song written last */
-        else if(KREISEL_DEMO_SONG==2&&!(shot||shot_all)&&!desk_any_song()){if(k_demo_load(&app)==0)fprintf(stderr,"song: COLDWIRE (the demo: nothing saved yet)\n");}
+        else if(KREISEL_DEMO_SONG==2&&!(shot||shot_all)&&!desk_any_song()){if(k_demo_load(&app)==0)fprintf(stderr,"song: %s (the demo: nothing saved yet)\n",k_demo_name);}
         if(session&&keep.ok){   /* the window where it was (only if that place is still on a display) */
             SDL_Rect d;int k2,on=0;
             for(k2=0;k2<SDL_GetNumVideoDisplays();k2++)if(SDL_GetDisplayUsableBounds(k2,&d)==0&&keep.x+40>=d.x&&keep.y>=d.y-8&&keep.x+40<d.x+d.w&&keep.y<d.y+d.h)on=1;
@@ -177,6 +202,9 @@ int main(int argc,char **argv){
         panel_shutdown();sdl_blit_shutdown();ui_draw_shutdown();SDL_DestroyRenderer(renderer);SDL_DestroyWindow(window);SDL_Quit();
         return i==0?0:1;
     }
+    sdl_link_init(&app);   /* Ableton Link (a build with it): the settings' Connect row, off until turned on */
+    if(console_port&&sdl_console_open(console_port)==0)fprintf(stderr,"console: 127.0.0.1:%d\n",console_port);
+    else if(console_port)fprintf(stderr,"console: port %d did not open\n",console_port);
     /* Audio is optional, and screenshot mode above stays deterministic. */
     KAudio audio;
     SDL_AudioDeviceID audio_dev=0;
@@ -196,8 +224,14 @@ int main(int argc,char **argv){
             fprintf(stderr,"audio: \"%s\" did not open (%s); the default instead\n",ac.out,SDL_GetError());
             audio_dev=SDL_OpenAudioDevice(NULL,0,&want,&have,flags);
         }}
+#if K_WITH_SAMPLES
+        sdl_sampler_input(ac.in);
+#endif
         if(audio_dev){
+            fprintf(stderr,"audio: %s, %s, %d Hz, %d frames\n",SDL_GetCurrentAudioDriver()?SDL_GetCurrentAudioDriver():"?",
+                    ac.out[0]?ac.out:getenv("AUDIODEV")?getenv("AUDIODEV"):"the default device",have.freq,(int)have.samples);   /* (the log says where the sound went) */
             k_audio_init(&audio,(uint32_t)have.freq);
+            sdl_link_format((uint32_t)have.freq,(uint32_t)have.samples);   /* (a buffer between the render and the speaker) */
             k_audio_sync(&audio,&app);
             SDL_PauseAudioDevice(audio_dev,0);
         }else fprintf(stderr,"audio unavailable (silent UI): %s\n",SDL_GetError());
@@ -207,7 +241,7 @@ int main(int argc,char **argv){
     if(data_dir[0])sdl_ioconf_load(&app,data_dir);   /* io.conf: which MIDI in, its channel, the clock, the keys (written with its defaults the first time) */
     sdl_midi_open("Fune");
     if(sdl_midi_outputs()&&sdl_ioconf_midi_out())k_io_send_to(sdl_midi_send);   /* MIDI out: the key bed's and the sequencer's notes, the clock */
-    int busy=1,dens=0;
+    int busy=1,dens=0;uint32_t fb_last=0;
     const int hidpi=session;   /* (the desktop app as itself; a device's profile stays in its own pixels) */
     if(hidpi)SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"1");   /* (the canvas's pixels, a little more or less than the window's: smoothly) */
     while(running){
@@ -217,9 +251,14 @@ int main(int argc,char **argv){
             process_event(&app,&e,renderer,&running);
             while(SDL_PollEvent(&e))process_event(&app,&e,renderer,&running);
         }
-        sdl_midi_poll(&app,SDL_GetTicks());   /* (what came in, before the frame's tick) */
+        sdl_midi_poll(&app,SDL_GetTicks());
+        sdl_console_poll(&app,audio_dev?&audio:NULL,SDL_GetTicks());   /* (a script's commands: --console) */   /* (what came in, before the frame's tick) */
         sdl_ioconf_sync(&app,data_dir);   /* (the Connect tab changed something: io.conf follows) */
         k_tick(&app,SDL_GetTicks());
+        sdl_link_poll(&app);   /* (before k_audio_sync: a PLAY here reaches the session before the audio starts it) */
+#if K_WITH_SAMPLES
+        sdl_sampler_tick(&app);
+#endif
         if(ui_pad_tick(&app,SDL_GetTicks()))busy=1;   /* (SELECT held: the menu at the cursor) */
         if(audio_dev){
             int playhead;
@@ -244,6 +283,14 @@ int main(int argc,char **argv){
             s2=ow/lw<oh/lh?ow/lw:oh/lh;
             if(s2!=dens){dens=s2;ui_draw_set_scale(s2);busy=1;}
         }
+        if(fb_path){   /* the framebuffer: the rows that changed, at most 30 frames a second (no vsync to wait on) */
+            uint32_t now=SDL_GetTicks();
+            busy=ui_draw(&app,&cursor,now);fbdev_show(ui_draw_canvas());
+            now=SDL_GetTicks();
+            if(busy&&now-fb_last<33u)SDL_Delay(33u-(now-fb_last));
+            fb_last=SDL_GetTicks();
+            continue;
+        }
         SDL_SetRenderDrawColor(renderer,8,8,8,255);SDL_RenderClear(renderer);
         busy=ui_draw(&app,&cursor,SDL_GetTicks());sdl_blit(renderer,ui_draw_canvas());
         if(panel_origin()>=0)panel_draw(renderer,&app);
@@ -251,6 +298,9 @@ int main(int argc,char **argv){
         if(busy)SDL_Delay(1);
     }
     k_io_send_to(NULL);sdl_midi_close();
+    if(audio_dev)SDL_PauseAudioDevice(audio_dev,1);
+    sdl_link_close();
+    sdl_console_close();
     if(session&&data_dir[0]){   /* the session kept for the next start (the window's place with it) */
         DeskWindow w={0,0,0,0,1};
         SDL_GetWindowPosition(window,&w.x,&w.y);SDL_GetWindowSize(window,&w.w,&w.h);
@@ -258,6 +308,10 @@ int main(int argc,char **argv){
     }
     if(controller)SDL_GameControllerClose(controller);
     if(audio_dev)SDL_CloseAudioDevice(audio_dev);
+#if K_WITH_SAMPLES
+    sdl_sampler_shutdown();
+#endif
+    if(fb_path){fbdev_keys_close();fbdev_close();ui_draw_shutdown();SDL_Quit();return 0;}
     panel_shutdown();sdl_blit_shutdown();ui_draw_shutdown();
     SDL_DestroyRenderer(renderer);SDL_DestroyWindow(window);SDL_Quit();return 0;
 }

@@ -76,7 +76,7 @@ enum { KS_BLANK, KS_VALID, KS_DAMAGED, KS_FOREIGN, KS_READERR };   /* what a sec
 static struct { int op, rc, obj, copy; uint32_t seq, len; } ks_last;   /* op: 1 write, 2 read, 3 erase, 4 clear */
 static uint8_t ks_boot_res;                    /* 0 not run, 1 loaded, 2 none saved, 3 skipped: unclean boot, 4 skipped: HOME held,
                                                 * 5 skipped: the last load never finished, 6 refused,
-                                                * 7 skipped: RESTORE LAST OFF, 8 COLDWIRE (kreisel_demo.h) */
+                                                * 7 skipped: RESTORE LAST OFF, 8 the demo song (kreisel_demo.h) */
 static struct { int8_t known, copy; uint32_t seq, len; } ks_cur[KS_OBJS];   /* each object's current copy (-1 none), cached */
 static uint32_t ks_pend __attribute__((section(".noinit")));   /* "LOAD" while a boot's song load runs: a crash in it skips the next */
 #define KS_PEND_MAGIC 0x4C4F4144u   /* "LOAD" */
@@ -401,7 +401,7 @@ static void ks_boot(int clean, int home_held)
     else if (home_held)
         ks_boot_res = 4;
     else if (KREISEL_DEMO_SONG == 1)
-        ks_boot_res = k_demo_load(&app) == 0 ? 8 : 6;   /* (8: COLDWIRE, while developing: kreisel_demo.h; the slots stay as they were;
+        ks_boot_res = k_demo_load(&app) == 0 ? 8 : 6;   /* (8: the demo song, while developing: kreisel_demo.h; the slots stay as they were;
                                                          * before RESTORE LAST, which is about the saved song) */
     else if (app.set_v[K_SET_RESTORE])
         ks_boot_res = 7;                       /* (7: skipped, RESTORE LAST OFF) */

@@ -12,6 +12,9 @@
 #include <stdlib.h>
 #include "kreisel.h"
 #include "kreisel_audio.h"
+#if K_WITH_SAMPLES
+#include "sampler.h"   /* the Sampler and recording (platforms/sdl/sampler.c) */
+#endif
 #include "kreisel_demo.h"
 #include "ui/draw.h"
 #include "input.h"
@@ -47,6 +50,9 @@ static void frame(lv_timer_t *t)
     last = ms;
     sdl_midi_poll(&app, ms);   /* (the Mac's MIDI: CoreMIDI) */
     k_tick(&app, ms);
+#if K_WITH_SAMPLES
+    sdl_sampler_tick(&app);
+#endif
     if (audio_dev) {   /* as platforms/sdl/main.c: the notes to the voices, the sample clock as the playhead */
         KNoteEv ne;
         int playhead;
@@ -124,6 +130,9 @@ void ui_init(void)
     {   char dir[1024];   /* SAVE's slots and the settings: files (s SAVE; the song written last opens at the next start) */
         if (desk_dir(dir, sizeof dir) && k_store_set(k_store_file(dir)) == 0) { have_store = 1; printf("[fune] files: %s\n", dir); }
         sdl_ctl_load(have_store ? dir : "");   /* the controllers' profiles (midi.c asks them of each MIDI source) */
+#if K_WITH_SAMPLES
+        sdl_sampler_init(have_store ? dir : "");   /* (before the song: it may name the Sampler and its files) */
+#endif
     }
     power_on(p);
     sdl_input_set(p->input);   /* the Zero's: a keyboard alone */
@@ -135,6 +144,9 @@ void ui_init(void)
         want.callback = audio_callback; want.userdata = &audio;
         audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
         if (audio_dev) { k_audio_init(&audio, (uint32_t)have.freq); k_audio_sync(&audio, &app); SDL_PauseAudioDevice(audio_dev, 0); }
+#if K_WITH_SAMPLES
+        sdl_sampler_input("");   /* (the computer's own input) */
+#endif
     }
     canvas = lv_canvas_create(lv_screen_active());
     lv_canvas_set_buffer(canvas, pixels, W, H, LV_COLOR_FORMAT_ARGB8888);
@@ -150,6 +162,9 @@ lv_indev_t *lv_sdl_keyboard_create(void) { return NULL; }
 __attribute__((destructor)) static void fune_unload(void)
 {
     sdl_midi_close();
+#if K_WITH_SAMPLES
+    sdl_sampler_shutdown();
+#endif
     if (audio_dev) { SDL_CloseAudioDevice(audio_dev); audio_dev = 0; }
 }
 

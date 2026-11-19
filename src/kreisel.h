@@ -93,6 +93,9 @@ enum { K_SET_LEDS, K_SET_ANIM, K_SET_SCREEN_OFF, K_SET_HELP, K_SET_RESTORE, K_SE
        K_SET_MIDI_LEARN,   /* MIDI learn (kreisel_io.h k_learn_*): OK on it, then a control on the page, then a MIDI control: a profile's row */
 #endif
        K_SET_USB_LEVEL,   /* the USB audio's level (a device with one: K_LAY_USB_AUDIO): Fixed, whatever the volume knob, or Volume */
+#if K_WITH_CONNECT
+       K_SET_LINK,   /* Ableton Link: Off, On (a build with it: KApp.link_peers >= 0); last, as the settings' record keeps rows by place */
+#endif
        K_SETTINGS };
 #define K_BALLOON_HOLD_MS 1500u
 #define K_BALLOON_OUT_MS 250u
@@ -164,6 +167,8 @@ typedef struct {
     uint32_t trk_ms;
     int beat;               /* 0..3 while playing (the beat in the bar, from k_tick), -1 when stopped. */
     uint32_t play_ms;
+    int step_seen;          /* the step k_tick last saw playing (-1 none) and when it began: live REC rounds to the nearer step */
+    uint32_t step_ms;
     uint32_t clock_ms;      /* the last time the platform gave (an action or a tick). */
     KVal bpm;
     int track;
@@ -179,7 +184,10 @@ typedef struct {
     uint8_t key_track[27];               /* the track each down key played (its release goes there, whatever track is in hand by then) */
     uint8_t midi_on[128];                /* a MIDI note sounding: 1 + the track it went to (0: none), and midi_lane what it pushed there */
     uint8_t midi_lane[128];
-    struct { uint8_t t, at, note, on; } rec_held[8];   /* live REC: a note written while playing and still held (its length: at its release) */
+    struct { uint8_t t, at, note, on; } rec_held[8];
+    struct { uint8_t t, at, note, vel, lane; } rec_wait[8];   /* live REC: notes and hits for the next step (rounded up), written once the
+                                             * playhead is on it, so the sequence does not strike them again (lane 0xFF: a note) */
+    uint8_t rec_wait_n; int8_t rec_wait_from;   /* live REC: a note written while playing and still held (its length: at its release) */
     KNoteEv note_q[K_NOTE_Q];            /* live notes for the sound: keys and MIDI in, taken by the platform (k_take_note) */
     uint8_t note_r, note_w;
     KVal tcolor[K_TRACKS];                /* each track's colour: an index into the palette */
@@ -257,6 +265,9 @@ typedef struct {
     uint8_t settings_open;  /* the settings (HOME held), after Felucca's MENU > SYSTEM: a list of rows, a value each */
     int settings_sel;
     uint8_t set_v[K_SETTINGS];   /* the settings' values (an index into each row's list) */
+#if K_WITH_CONNECT
+    int8_t link_peers;           /* Ableton Link (the platform's): -1 not in this build, else the other apps in the session while on */
+#endif
     uint8_t set_pending;         /* a setting changed: kept (k_settings_save) once the settings close and the transport stops */
     uint32_t set_try_ms;                 /* when the settings were last written (a failed write: tried again 2 s later) */
     uint8_t set_ask;             /* CLEAR ALL turned once: once more clears, anything else lets it go */
@@ -394,6 +405,11 @@ extern const uint16_t k_scale_masks[16];     /* SCL's scales: bit i, the note i 
 /* External clock (kreisel_clock.c): the platform feeds MIDI realtime bytes; see kreisel_clock.h */
 
 void k_dispatch(KApp *app, KAction action);
+#if K_WITH_SAMPLES
+/* (Linux and macOS) the platform's look at an action first: 1 when it took it (the Sampler's page: REC records the input, PRESETS
+ * step through the samples folder). Never the FM-1's */
+extern int (*k_action_hook)(KApp *app, const KAction *action);
+#endif
 #define K_BOOM_MS 900u   /* Dynamite's fuse: the rings drawn, then the clear */
 void k_tick(KApp *app, uint32_t time_ms);
 void k_open_page(KApp *app, KPage page);

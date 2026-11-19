@@ -6,15 +6,17 @@ A small music studio for multiple platforms
 
 ![Fune on the M-VAVE FM-1 and the M5Stack Cardputer Zero](docs/images/screens.png)
 
-**Status: 0.0.1 Alpha, in development.** Song and preset files may still change between builds.
+**Status: 0.0.2 Alpha, in development.** Song and preset files may still change between builds.
 
 **Install on an FM-1**: the [web installer](https://hugelton.com/fune/install/) (Chrome or Edge on a computer, over USB).
+**macOS and the Cardputer Zero**: the [latest release](https://github.com/hugelton/Fune/releases/latest).
 
 | Platform | Status |
 | --- | --- |
 | M-VAVE FM-1 | Beta |
 | M-VAVE SMK-37 Pro / Elite | Alpha |
-| macOS, Linux | Planned |
+| macOS | Alpha |
+| Linux (desktop) | Planned |
 | Web (desktop, tablet) | Planned |
 | M5Stack Cardputer Zero | Alpha |
 | H700 handhelds (PortMaster) | Planned |
@@ -24,10 +26,12 @@ A small music studio for multiple platforms
 - **Sequencer**: 16 steps, four patterns a track; a piano roll, a step grid, drum lanes and a tracker view; songs of up to 256 scenes
 - **Synths**: Retro, Phase, Trio, Lofi, Organ and Digital, each with its own panel
 - **Drums**: eight lanes of synthesised pieces a kit
+- **Sampler** (macOS, Linux, the Cardputer Zero): a WAV file across the keys, recording from the microphone, a file browser
 - **Effects**: two inserts a track from fifteen, two send buses, a mixer
 - **Presets and songs**: factory and user presets, songs saved on the device
 - **Tools**: fill, Euclid, random, shift, humanize, reverse, Dynamite, undo
 - **MIDI**: in and out, clock sync, MIDI learn on a computer
+- **Ableton Link** (macOS, Linux, the Cardputer Zero): tempo, bar and start / stop with other Link apps
 - **Plugins**: synth engines and effects from outside the core (an SDK); the [Fune Library](https://hugelton.github.io/fune-library/) lists them
 
 ## Before you install on an FM-1
@@ -51,7 +55,8 @@ Needs CMake, a C11 compiler, SDL2 and Python 3 with Pillow and fontTools. The FM
 ## Credits and licence
 
 [MPL-2.0](LICENSE); the plugin SDK and the example plugins MIT; the documentation CC BY 4.0; the third-party parts keep their
-own ([LICENSING.md](LICENSING.md)). Thanks: [CREDITS.md](CREDITS.md). The name and the logo: [TRADEMARK.md](TRADEMARK.md).
+own ([LICENSING.md](LICENSING.md)). The macOS, Linux and Cardputer Zero programs include Ableton Link (GPL-2.0-or-later), so
+each of them as a whole is under the GPL; Fune's own files stay MPL-2.0. Thanks: [CREDITS.md](CREDITS.md). The name and the logo: [TRADEMARK.md](TRADEMARK.md).
 
 M-VAVE, FM-1 and SMK-37 are trademarks of their respective owners. Fune is not affiliated with or endorsed by them.
 

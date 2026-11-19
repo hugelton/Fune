@@ -1,0 +1,78 @@
+# MURIYA on the FM-1 for the teaser (platforms/fm1hw/fm1_demo.py, docs/DEMO_VIDEO.md)
+# 98 BPM: a bar is 2.45 s, 96 bars ~3:55. Tracks: 1 Retro, 2 Phase, 3 Digital, 4 Trio.
+# Every sweep is turned back by the same amount, and the song is loaded again at the end: nothing stays changed.
+# Cuts for the edit (where the screen changes most): bars 9-24 (~39 s), 33-48 (~39 s), 65-80 (~39 s).
+
+# 1-8: Retro and Trio. The mixer's meters, then the notes of track 1
+1     page home
+3     page mixer
+5     track 1
+5     page roll
+7     btn seq                 # ROLL -> STEP
+
+# 9-16: Phase comes in: its own screen, then its DCW opened and closed
+9     track 2
+9     page synth
+11    page edit
+13    sweep k1 +24 4          # (EDIT's first knob: the brightness of the line)
+14    sweep k1 -24 4
+15    page env1
+
+# 17-32: Trio's variations; the tracker
+17    track 4
+17    page synth
+19    sweep k2 +16 2
+19.3  sweep k2 -16 2
+21    page roll
+23    btn seq                 # ROLL -> STEP
+24    btn seq                 # STEP -> tracker
+25    track 1
+27    track 2
+29    page fx
+31    page song               # the song's scenes going by
+
+# 33-48: the break, Phase and Digital: FM2's scope, a filter, the buses
+33    track 3
+33    page synth
+35    sweep k1 +12 4
+36    sweep k1 -12 4
+37    page lfo
+39    track 2
+39    page synth
+41    page bus1
+43    page mixer
+45    track 3
+45    page edit
+47    sweep k2 +20 2
+47.3  sweep k2 -20 2
+
+# 49-64: everything back; envelopes and the arpeggio page
+49    track 1
+49    page synth
+51    page env1
+53    track 4
+53    page lfo
+55    page arp
+57    page home
+61    page tracks
+
+# 65-80: Retro's second theme: its scope and filter
+65    track 1
+65    page synth
+67    page edit
+69    sweep k1 -20 4          # (the cutoff down and back up)
+70    sweep k1 +20 4
+71    page roll
+73    track 2
+73    page roll
+75    btn seq
+77    page fx
+79    page song
+
+# 81-96: the end on the mixer
+81    page mixer
+85    track 4
+85    page synth
+89    page home
+93    page mixer
+96.4  stop

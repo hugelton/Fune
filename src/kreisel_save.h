@@ -19,7 +19,11 @@
 
 #define K_SONG_SLOTS 6
 #define K_USER_PRESETS 24
+#if K_WITH_SAMPLES
+#define K_SAVE_BUF ((896 + 136) * K_TRACKS)   /* (Linux and macOS: a Sampler track's SMPL too, kreisel_song.c) */
+#else
 #define K_SAVE_BUF (896 * K_TRACKS)   /* >= k_song_max_size() and k_preset_max_size(): checked by k_store_set (3584 at four tracks: a song slot on the FM-1 holds 3584) */
+#endif
 enum { K_STORE_SONG, K_STORE_PRESET };
 enum { K_SAVE_NONE, K_SAVE_LOAD, K_SAVE_SAVE, K_SAVE_NAME, K_SAVE_ERASE, K_SAVE_SURE };   /* SURE: ERASE asked once, OCT+ again erases */
 

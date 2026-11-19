@@ -36,6 +36,8 @@ int k_wav_read_file(const char *path, uint8_t **buf, size_t *n, size_t max_bytes
 /* Both of the above: read and parse the file, the limit applying to the frames (the file may be up to twice that, float). */
 int k_wav_load(const char *path, KWav *out, size_t max_bytes);
 void k_wav_free(KWav *w);
+/* Write frames (interleaved, 1 or 2 channels) as a 16-bit PCM WAV file: K_WAV_OK, or K_WAV_ERR_IO (a file half written is removed) */
+int k_wav_write(const char *path, const int16_t *frames, uint32_t nframes, int channels, uint32_t rate);
 const char *k_wav_error(int err);
 
 #endif

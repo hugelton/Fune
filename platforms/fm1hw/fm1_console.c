@@ -7,7 +7,8 @@
  * (cdc_task), usb_poll moves the bytes. The baud rate is ignored.
  *
  * Line based, no echo, no prompt, each reply one line ending in CR LF:
- *   stat                     key=value pairs: stage, uptime, frames, frame ms (last / mean / max), audio, page, track, playing
+ *   stat                     key=value pairs: stage, uptime, frames, frame ms (last / mean / max), audio, page, track, playing,
+ *                            step (the 16th, -1 stopped), scene (the song's, 1..; 0 when no song plays)
  *   page N|NAME              open page N (0..16, the KPage numbers) or by name (home, mixer, roll, "env 1", ...)
  *   track N                  select track N (1..4)
  *   play                     toggle play
@@ -20,6 +21,7 @@
  *   prof                     reset the timing window (frame max / mean, audio worst); `stat` then reports that window
  *   save [1..6]              the song into a slot (default: the slot it came from, else 1), as the SAVE page's SAVE does
  *   load [1..6]              a song slot into the app (default: the one saved last, as the boot does); untouched when it fails
+ *   demo                     the built-in demo song into the app (as a first start plays it), unsaved
  *   songput N / songdata HEX / songload   a song file sent from the computer (fm1_put_song.py): N bytes announced, then the
  *                            bytes as hex, ~24 a line, then loaded into the app (k_song_load; refused, the app as it was). `save N`
  *                            then keeps it in slot N
@@ -43,6 +45,8 @@
  *   plugoff N / plugon N     switch image N off / on from the next start (a bit of its header; on also takes it now if it can)
  *   plugerase N              erase image N (not one that is live: plugoff N, restart, then erase)
  *                            The plug commands that write flash are refused while playing (the sound stops for each erase).
+ *   ledx COL ROW | ledx off  light a place of the LED matrix (column 0..10, row bit 1..4), to find an LED with no key under
+ *                            it (PLAY's green one: FM1_PLAY_GREEN in fm1_main.c)
  *   usb, crash, memr ADDR [LEN], uboot yes   (read-only diagnostics, and the SysEx soft key)
  * Every write command sets input_seen so the screen redraws. Nothing here writes memory; save and songclear write flash, only
  * Kreisel's own sectors (fm1_store.c). */
@@ -418,6 +422,8 @@ static void con_stat(void)
     con_puts(k_page_name(app.page));
     con_kv("track", app.track + 1);
     con_kv("playing", app.playing);
+    con_kv("step", app.step);                               /* the 16th playing (-1 stopped), and a song's scene (1..): fm1_demo.py */
+    con_kv("scene", audio.song_on ? audio.scene + 1 : 0);
     con_kv("bpm", app.bpm);
     con_kv("clk", app.clock_src);
     con_kv("master", app.master);
@@ -550,6 +556,15 @@ static void con_exec(const char *p)
             con_kv("bytes", (int32_t)ks_last.len);
             con_kv("sector", (int32_t)ks_base(ks_last.obj, ks_last.copy));
             con_kv("seq", (int32_t)ks_last.seq);
+            con_end();
+        }
+    } else if (con_word(&p, "demo")) {                  /* demo: the built-in demo song, as a first start plays it (fm1_demo.py) */
+        input_seen = 1;
+        if (k_demo_load(&app)) {
+            con_err("demo");
+        } else {
+            con_puts("ok demo=");
+            con_puts(k_demo_name);
             con_end();
         }
     } else if (con_word(&p, "load")) {                  /* load [1..6]: a song slot (default: the one saved last) */
@@ -859,9 +874,21 @@ static void con_exec(const char *p)
         con_plug_n(p, 1, 0);
     else if (con_word(&p, "plugerase"))
         con_plug_n(p, 0, 1);
+    else if (con_word(&p, "ledx")) {
+        int32_t c, r;
+        if (con_word(&p, "off"))
+            led_probe = -1;
+        else if (con_num(&p, &c) && con_num(&p, &r) && c >= 0 && c < (int)FM1_NCOL && r >= 1 && r <= 4)
+            led_probe = (int16_t)(c << 3 | r);
+        else {
+            con_err("ledx 0..10 1..4 | ledx off");
+            return;
+        }
+        con_ok();
+    }
     else if (con_word(&p, "help") || con_word(&p, "?"))
         con_puts("stat page track play key knob btn note save load slots slotget slotdata slotput songinfo songclear "
-                 "plugs plugput plugdata plugend plugoff plugon plugerase prof usb crash memr uboot\r\n");
+                 "plugs plugput plugdata plugend plugoff plugon plugerase ledx prof usb crash memr uboot\r\n");
     else if (*p)
         con_err("? (help)");
 }
